@@ -1,7 +1,7 @@
 module depgraph
 
 fn test_depgraph() ? {
-	mut course_book := Tree{}
+	mut course_book := Tree<string>{}
 	course_book.add('MAJOR-PHILOSOPHY', 'STAT-101', 'PHIL-102')
 	course_book.add('MAJOR-MATHS', 'STAT-101', 'CALC-102')
 	course_book.add('CALC-102', 'CALC-101')

@@ -1,38 +1,36 @@
 module depgraph
 
-pub type ModuleId = u16
-
 // Taken from: https://gist.github.com/Fordi/1706368
 // Transpiled to ES6 for readability using Lebab: https://lebab.unibtc.me/editor
 // Credits to: https://github.com/Fordi
 
 [heap]
-pub struct Tree {
+pub struct Tree<T> {
 mut:
 	len    int
-	keys   []ModuleId
-	values []&Node
+	keys   []T
+	values []&Node<T>
 }
 
-pub fn (tree &Tree) str() string {
+pub fn (tree &Tree<T>) str() string {
 	return tree.values.str()
 }
 
-pub fn (tree &Tree) has(id string) bool {
+pub fn (tree &Tree<T>) has(id T) bool {
 	return id in tree.keys
 }
 
-pub fn (mut tree Tree) add(id string, dependencies ...string) &Node {
+pub fn (mut tree Tree<T>) add(id T, dependencies ...T) &Node<T> {
 	new_id := id
 	tree.keys << new_id
-	tree.values << &Node{tree, new_id, dependencies}
+	tree.values << &Node<T>{tree, new_id, dependencies}
 	defer {
 		tree.len++
 	}
 	return tree.values[tree.values.len - 1]
 }
 
-pub fn (mut tree Tree) delete(id string) {
+pub fn (mut tree Tree<T>) delete(id T) {
 	idx := tree.keys.index(id)
 	if idx == -1 {
 		return
@@ -47,19 +45,26 @@ pub fn (mut tree Tree) delete(id string) {
 	tree.len--
 }
 
-pub fn (tree &Tree) get_node(id string) ?&Node {
-	idx := tree.keys.index(id)
+pub fn (tree &Tree<T>) get_node(id T) ?&Node<T> {
+	mut idx := -1
+	for k_idx, key in tree.keys {
+		if key == id {
+			idx = k_idx
+			break 
+		}
+	}
+
 	if idx == -1 {
 		return error('Node not found')
 	}
 	return tree.values[idx] ?
 }
 
-pub fn (tree &Tree) size() int {
+pub fn (tree &Tree<T>) size() int {
 	return tree.len
 }
 
-pub fn (tree &Tree) has_dependents(id string, excluded ...string) bool {
+pub fn (tree &Tree<T>) has_dependents(id T, excluded ...T) bool {
 	for node in tree.values {
 		if (excluded.len != 0 && node.id !in excluded) && id in node.dependencies {
 			return true
@@ -69,8 +74,8 @@ pub fn (tree &Tree) has_dependents(id string, excluded ...string) bool {
 	return false
 }
 
-pub fn (tree &Tree) get_available_nodes(completed ...string) []string {
-	mut ret := []string{}
+pub fn (tree &Tree<T>) get_available_nodes(completed ...T) []T {
+	mut ret := []T{}
 	for node in tree.values {
 		deps := node.get_all_dependencies(...completed)
 		if deps.len == 0 && node.id !in completed {
@@ -82,19 +87,19 @@ pub fn (tree &Tree) get_available_nodes(completed ...string) []string {
 }
 
 [heap]
-pub struct Node {
+pub struct Node<T> {
 mut:
-	tree &Tree = &Tree(0)
+	tree &Tree<T> = &Tree<T>(0)
 pub mut:
-	id           ModuleId
-	dependencies []ModuleId
+	id           T
+	dependencies []T
 }
 
-pub fn (node &Node) str() string {
+pub fn (node &Node<T>) str() string {
 	return '$node.id -> (${node.dependencies.join(', ')})'
 }
 
-pub fn (mut node Node) remove_dependency(dep_path string) int {
+pub fn (mut node Node<T>) remove_dependency(dep_path string) int {
 	if node.dependencies.len == 0 || dep_path.len == 0 {
 		return -1
 	}
@@ -109,8 +114,8 @@ pub fn (mut node Node) remove_dependency(dep_path string) int {
 	return -2
 }
 
-pub fn (node &Node) get_all_dependencies(completed ...string) []string {
-	mut ret := []string{}
+pub fn (node &Node<T>) get_all_dependencies(completed ...T) []T {
+	mut ret := []T{}
 	if isnil(node) {
 		return ret
 	}
@@ -148,12 +153,12 @@ pub fn (node &Node) get_all_dependencies(completed ...string) []string {
 	return ret
 }
 
-pub fn (node &Node) get_next_nodes(completed ...string) []string {
+pub fn (node &Node<T>) get_next_nodes(completed ...T) []T {
 	required_nodes := node.get_all_dependencies(...completed)
 	available_nodes := node.tree.get_available_nodes(...completed)
 
-	mut available_and_required := map[string]bool{}
-	mut ret := []string{}
+	mut available_and_required := map[T]bool{}
+	mut ret := []T{}
 
 	for a in available_nodes {
 		available_and_required[a] = false
@@ -176,7 +181,7 @@ pub fn (node &Node) get_next_nodes(completed ...string) []string {
 }
 
 [unsafe]
-pub fn (node &Node) free() {
+pub fn (node &Node<T>) free() {
 	unsafe {
 		// assume id has been freed
 		// since they share the same address
