@@ -35,13 +35,10 @@ pub mut:
 	// Dependency tree. Used for tracking dependencies
 	// as basis for removing symbols/scopes/imports
 	// tree goes: tree[<full dir path>][]<full dir path>
-	dependency_tree depgraph.Tree
-	// Symbol table
-	// map goes: map[<full dir path>]map[]&Symbol
-	symbols map[string][]&Symbol
+	dependency_tree depgraph.Tree<ModuleId>
 	// Project store
 	// A collection of projects (e.g. directory with one or more modules)
-	projects ProjectStore
+	project_store ProjectStore
 	// Scope data for different opened files
 	// map goes: map[<full file path>]&ScopeTree
 	// opened_scopes map[string]&ScopeTree

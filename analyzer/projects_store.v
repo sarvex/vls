@@ -63,6 +63,14 @@ pub fn (mut store ProjectStore) add_file(file_path string, tree C.TSTree) FileLo
 	}
 }
 
+pub fn (mut store ProjectStore) delete_file(location FileLocation) ? {
+
+}
+
+pub fn (store &ProjectStore) has_project(dir string) bool {
+	return store.project_paths.index(dir) != -1
+}
+
 pub fn (store &ProjectStore) project_by_dir(dir string) ?&Project {
 	idx := store.project_paths.index(dir)
 	if idx == -1 {
@@ -106,6 +114,15 @@ pub fn (mods []Module) find_by_name(id name) ?&Module {
 	for mod in mods {
 		if mod.name == name {
 			return mod
+		}
+	}
+	return none
+}
+
+pub fn (mods []Module) index_by_id(id ModuleId) ?int {
+	for i, mod in mods {
+		if mod.id == id {
+			return i
 		}
 	}
 	return none
@@ -210,4 +227,8 @@ pub mut:
 pub struct FileLocation {
 	module_id ModuleId
 	file_id   FileId
+}
+
+pub fn (a FileLocation) ==(b FileLocation) bool {
+	return a.module_id == b.module_id && a.file_id == b.file_id
 }

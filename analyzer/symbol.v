@@ -91,7 +91,7 @@ pub fn (sa SymbolAccess) str() string {
 pub const void_sym = &Symbol{
 	name: 'void'
 	kind: .void
-	file_path: ''
+	file_location: ''
 	file_version: 0
 	is_top_level: true
 }
@@ -114,7 +114,7 @@ pub mut:
 	sumtype_children_len    int
 	interface_children_len  int
 	children_syms           []&Symbol // methods, sum types, map types, optionals, struct fields, etc.
-	file_path               string         [required] // required in order to register the symbol at its appropriate directory.
+	file_location           FileLocation   [required] // required in order to register the symbol at its appropriate directory.
 	file_version            int            [required] // file version when the symbol was registered
 	scope                   &ScopeTree = &ScopeTree(0)
 }
@@ -283,9 +283,9 @@ pub fn (infos []&Symbol) index(name string) int {
 }
 
 // index_by_row returns the index based on the given file path and row
-pub fn (infos []&Symbol) index_by_row(file_path string, row u32) int {
+pub fn (infos []&Symbol) index_by_row(file_location FileLocation, row u32) int {
 	for i, v in infos {
-		if v.file_path == file_path && v.range.start_point.row == row {
+		if v.file_location == file_location && v.range.start_point.row == row {
 			return i
 		}
 	}
@@ -293,14 +293,14 @@ pub fn (infos []&Symbol) index_by_row(file_path string, row u32) int {
 	return -1
 }
 
-pub fn (symbols []&Symbol) filter_by_file_path(file_path string) []&Symbol {
+pub fn (symbols []&Symbol) filter_by_file_location(file_location string) []&Symbol {
 	mut filtered := []&Symbol{}
 	for sym in symbols {
-		if sym.file_path == file_path {
+		if sym.file_location == file_location {
 			filtered << sym
 		}
 
-		filtered_from_children := sym.children_syms.filter_by_file_path(file_path)
+		filtered_from_children := sym.children_syms.filter_by_file_location(file_location)
 		for child_sym in filtered_from_children {
 			if filtered.exists(child_sym.name) {
 				continue

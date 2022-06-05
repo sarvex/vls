@@ -30,7 +30,7 @@ pub fn (mut ls Vls) did_open(params lsp.DidOpenTextDocumentParams, mut wr Respon
 	// - it's V file ending with .v format
 	// - the project directory does not end with a dot (.)
 	// - and has not been present in the dependency tree
-	if uri.ends_with('.v') && project_dir != '.' && !ls.store.dependency_tree.has(project_dir) {
+	if uri.ends_with('.v') && project_dir != '.' && !ls.store.project_store.has(project_dir) {
 		should_scan_whole_dir = true
 	}
 
@@ -68,6 +68,7 @@ pub fn (mut ls Vls) did_open(params lsp.DidOpenTextDocumentParams, mut wr Respon
 				version: 1
 			}
 
+			ls.files[file_uri].store_location = ls.store.project_store.add_file(file_uri, ls.files[file_uri].tree)
 			has_file = true
 		}
 

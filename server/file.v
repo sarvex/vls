@@ -2,13 +2,15 @@ module server
 
 // import tree_sitter
 import lsp
+import analyzer
 
 struct File {
 mut:
-	uri     lsp.DocumentUri
-	source  []rune
-	tree    &C.TSTree       [required]
-	version int = 1
+	uri            lsp.DocumentUri
+	source         []rune
+	tree           &C.TSTree       [required]
+	store_location analyzer.FileLocation
+	version        int = 1
 }
 
 [unsafe]
