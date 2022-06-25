@@ -1,5 +1,9 @@
 module analyzer
 
+import ast
+import tree_sitter_v as v
+import tree_sitter
+
 /*
 In V terminology, a "module" is defined as a collection of files in a directory.
 However, there are some instances that a directory may mixed "main" and non-"main" files.
@@ -24,7 +28,17 @@ pub mut:
 	projects           []&Project = []&Project{cap: 65535}
 }
 
-pub fn (mut store ProjectStore) add_file(file_path string, tree C.TSTree) FileLocation {
+fn (mut store ProjectStore) generate_module_id() ModuleId {
+	defer { store.module_id_counter++ }
+	return store.module_id_counter
+}
+
+fn (mut store ProjectStore) generate_file_id() FileId {
+	defer { store.file_id_counter++ }
+	return store.file_id_counter
+}
+
+pub fn (mut store ProjectStore) add_file(file_path string, tree ast.Tree, src_text tree_sitter.SourceText) FileLocation {
 	dir := os.dir(file_path)
 	mut proj := store.project_by_dir(dir) or {
 		store.project_paths << dir
@@ -35,32 +49,20 @@ pub fn (mut store ProjectStore) add_file(file_path string, tree C.TSTree) FileLo
 		new_project
 	}
 
+	mut module_name := 'main'
 	// scan for module_declaration
 	// TODO: use queries
-	mut nodes := new_tree_cursor(tree.root_node())
-	mut module_name := 'main'
-
-	for node in nodes {
-		if node.type_name() == 'module_clause' {
-			module_name = node.named_child(node.named_child_count() - 1)
-			break
-		}
+	if module_node := tree.root_node().node_by_type(v.NodeType.module_clause) {
+		module_name = module_node.named_child(module_node.named_child_count() - 1).text(src_text)
 	}
 
-	mut mod := proj.modules.find_by_name(module_name) or {
-		new_proj := proj.new_module(store.module_id_counter, module_name, dir)
-		store.module_id_counter++
-		new_proj
-	}
-
-	new_file := infer_file_by_file_path(store.file_id_counter, file_path)
-	store.file_id_counter++
-
-	mod.files << new_file
-	return FileLocation{
-		module_id: mod.id
-		file_id: new_file.id
-	}
+	defer { store.file_id_counter++ }
+	return proj.add_file(
+		store.generate_file_id, 
+		store.generate_module_id, 
+		module_name, 
+		file_path
+	)
 }
 
 pub fn (mut store ProjectStore) delete_file(location FileLocation) ? {
@@ -83,7 +85,7 @@ pub fn (store &ProjectStore) project_by_dir(dir string) ?&Project {
 pub struct Project {
 pub mut:
 	path         string [required]
-	module_names []string = []string{cap: 255}
+	module_names []string  = []string{cap: 255}
 	modules      []&Module = []Module{cap: 255}
 }
 
@@ -98,16 +100,31 @@ pub fn (mut proj Project) new_module(id ModuleId, name string, path string) &Mod
 	return new_mod
 }
 
+pub fn (mut proj Project) add_file(file_id fn () FileId, module_id fn () ModuleId, module string, file_path string) FileLocation {
+	mut mod := proj.modules.find_by_name(module_name) or {
+		proj.new_module(module_id(), module_name, dir)
+	}
+
+	mod.files << infer_file_by_file_path(file_id(), file_path)
+	return FileLocation{
+		module_id: mod.id
+		file_id: new_file.id
+	}
+}
+
 pub type ModuleId = u16
 pub type FileId = u16
 
 [heap]
 pub struct Module {
+pub:
+	id              ModuleId [required]
 pub mut:
-	id    ModuleId [required]
-	name  string [required]
-	path  string [required]
-	files []&File = []&File{cap: 255}
+	sym_id_counter  u16 = 1
+	name            string [required]
+	path            string [required]
+	symbols         []&Symbol = []&Symbol{cap: 500}
+	files           []&File = []&File{cap: 255}
 }
 
 pub fn (mods []Module) find_by_name(id name) ?&Module {
@@ -178,13 +195,13 @@ fn infer_file_by_file_path(id FileId, path string) &File {
 		for_ndefine = name.all_after_last('_notd_')
 	}
 
-	return &File {
+	return &File{
 		path: path
 		id: id
 		language: language
 		platform: platform
 		for_define: for_define
-		for_nddefine: for_ndefine
+		for_ndefine: for_ndefine
 	}
 }
 
@@ -221,7 +238,7 @@ pub mut:
 	for_define  string
 	for_ndefine string
 	scopes      []&ScopeTree // TODO: remove later
-	symbols     []&Symbol = []&Symbol{cap: 255}
+	symbol_locs []SymbolLocation = []SymbolLocation{cap: 300}
 }
 
 pub struct FileLocation {

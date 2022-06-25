@@ -733,6 +733,20 @@ pub fn (node Node<T>) named_descendant_for_point_range(start_point C.TSPoint, en
 	return new_node<T>(node.type_factory, desc)
 }
 
+pub fn (node Node<T>) node_by_type(type_name T) ?Node<T> {
+	len := node.named_child_count()
+	mut named_child := node.named_child(len - 1)?
+	for i := 0; i < len; i++ {
+		if named_child.type_name == type_name {
+			return named_child
+		}
+		named_child = named_child.next_named_sibling() or {
+			continue
+		}
+	}
+	return none
+}
+
 pub fn (node Node<T>) last_node_by_type(type_name T) ?Node<T> {
 	len := node.named_child_count()
 	mut named_child := node.named_child(len - 1)?

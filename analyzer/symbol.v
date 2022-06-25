@@ -98,8 +98,18 @@ pub const void_sym = &Symbol{
 
 pub const void_sym_arr = [void_sym]
 
+pub type SymbolId = u16
+
+pub struct SymbolLocation {
+	file FileLocation
+	id   SymbolId
+	pos  C.TSRange
+}
+
 [heap]
 pub struct Symbol {
+pub:
+	id                      u32
 pub mut:
 	name                    string
 	kind                    SymbolKind   // see SymbolKind
