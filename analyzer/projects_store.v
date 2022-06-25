@@ -139,9 +139,9 @@ fn infer_file_by_file_path(id FileId, path string) &File {
 	// language
 	if name.ends_with('.c') {
 		language = .c
-	} else name.ends_with('.js') {
+	} else if name.ends_with('.js') {
 		language = .js
-	} else name.ends_with('.native') {
+	} else if name.ends_with('.native') {
 		language = .native
 	}
 
