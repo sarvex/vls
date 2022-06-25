@@ -7,9 +7,24 @@ import lsp.log
 import os
 import tree_sitter
 import tree_sitter_v as v
+import ast
 import analyzer
 import time
 import v.vmod
+
+const vls_folder_path = os.join_path(os.home_dir(), '.vls')
+
+pub fn get_folder_path() string {
+	if os.is_file(vls_folder_path) {
+		os.rm(vls_folder_path) or {}
+	}
+	
+	if !os.exists(vls_folder_path) {
+		os.mkdir(vls_folder_path) or {}
+	}
+
+	return vls_folder_path
+}
 
 pub const vls_build_commit = meta_vls_build_commit()
 
@@ -94,7 +109,7 @@ mut:
 struct Vls {
 mut:
 	vroot_path       string
-	parser           &C.TSParser
+	parser           &tree_sitter.Parser<v.NodeType>
 	store            analyzer.Store
 	status           ServerStatus = .off
 	root_uri         lsp.DocumentUri
@@ -113,11 +128,9 @@ pub mut:
 }
 
 pub fn new() &Vls {
-	mut parser := tree_sitter.new_parser()
-	parser.set_language(v.language)
 	reporter := &DiagnosticReporter{} 
 	inst := &Vls{
-		parser: parser
+		parser: ast.new_parser() 
 		reporter: reporter
 		store: analyzer.Store{
 			reporter: reporter
@@ -133,6 +146,7 @@ pub fn new() &Vls {
 
 fn (mut wr ResponseWriter) wrap_error(err IError) IError {
 	if err is none {
+		wr.write(jsonrpc.null)
 		return err
 	}
 	wr.log_message(err.msg(), .error)
@@ -269,7 +283,7 @@ pub fn (mut ls Vls) handle_jsonrpc(request &jsonrpc.Request, mut rw jsonrpc.Resp
 				})
 			}
 			else {
-				return jsonrpc.method_not_found
+				return jsonrpc.response_error(error: jsonrpc.method_not_found, data: request.method).err()
 			}
 		}
 	} else {

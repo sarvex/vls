@@ -1,15 +1,15 @@
 import os
-import tree_sitter
-import tree_sitter_v as v
+import ast
 import test_utils
 import benchmark
-import analyzer { Collector, SemanticAnalyzer, Store, SymbolAnalyzer, new_tree_cursor, register_builtin_symbols }
+import analyzer { Collector, SemanticAnalyzer, Store, SymbolAnalyzer, new_tree_cursor, setup_builtin, Runes }
 import analyzer.an_test_utils
+import v.util.diff
+import term
 
 fn test_semantic_analysis() ? {
-	mut parser := tree_sitter.new_parser()
-	parser.set_language(v.language)
-
+	diff_cmd := diff.find_working_diff_command() or { '' }
+	mut p := ast.new_parser()
 	vlib_path := os.join_path(os.dir(os.getenv('VEXE')), 'vlib')
 
 	mut bench := benchmark.new_benchmark()
@@ -18,15 +18,8 @@ fn test_semantic_analysis() ? {
 		reporter: reporter
 		default_import_paths: [vlib_path]
 	}
-	mut builtin_import, _ := store.add_import(
-		resolved: true
-		module_name: 'builtin'
-		path: os.join_path(vlib_path, 'builtin')
-	)
-	mut imports := [builtin_import]
-	store.register_auto_import(builtin_import, '')
-	register_builtin_symbols(mut store, builtin_import)
-	store.import_modules(mut imports)
+
+	setup_builtin(mut store, os.join_path(vlib_path, 'builtin'))
 
 	mut sym_analyzer := SymbolAnalyzer{
 		store: store
@@ -40,7 +33,7 @@ fn test_semantic_analysis() ? {
 	test_files_dir := test_utils.get_test_files_path(@FILE)
 	test_files := test_utils.load_test_file_paths(test_files_dir, 'semantic_analyzer') or {
 		bench.fail()
-		eprintln(bench.step_message_fail(err.msg()))
+		println(bench.step_message_fail(err.msg()))
 		return err
 	}
 
@@ -52,7 +45,7 @@ fn test_semantic_analysis() ? {
 		test_name := os.base(test_file_path)
 		content := os.read_file(test_file_path) or {
 			bench.fail()
-			eprintln(bench.step_message_fail('file $test_file_path is missing'))
+			println(bench.step_message_fail('file $test_file_path is missing'))
 			continue
 		}
 
@@ -65,34 +58,37 @@ fn test_semantic_analysis() ? {
 
 		if err_msg.len != 0 || src.len == 0 {
 			bench.fail()
-			eprintln(bench.step_message_fail(err_msg))
+			println(bench.step_message_fail(err_msg))
 			continue
 		}
 
 		println(bench.step_message('Testing $test_name'))
-		tree := parser.parse_string(src)
-
-		src_runes := src.runes()
-		cursor := new_tree_cursor(tree.root_node())
+		tree := p.parse_string(source: src)
+		src_runes := Runes(src.runes())
+		mut cursor := new_tree_cursor(tree.root_node())
 		store.import_modules_from_tree(tree, src_runes, vlib_path)
 
 		sym_analyzer.src_text = src_runes
-		sym_analyzer.cursor = cursor
-
 		semantic_analyzer.src_text = src_runes
-		semantic_analyzer.cursor = cursor
 
-		symbols := sym_analyzer.analyze()
-		semantic_analyzer.analyze()
+		symbols := sym_analyzer.analyze_from_cursor(mut cursor)
+		semantic_analyzer.analyze_from_cursor(mut cursor)
 		result := an_test_utils.sexpr_str_reporter(reporter)
-
-		assert result == test_utils.newlines_to_spaces(expected)
-		println(bench.step_message_ok(test_name))
-
-		unsafe {
-			sym_analyzer.src_text.free()
+		expected_trimmed := test_utils.newlines_to_spaces(expected)
+		term.clear_previous_line()
+		if result != expected_trimmed {
+			if diff_cmd.len != 0 {
+				bench.fail()
+				println(bench.step_message_fail(test_name))
+				println(diff.color_compare_strings(diff_cmd, 'vls_semantic_analyzer_test', expected_trimmed, result))
+			} else {
+				assert result == expected_trimmed
+			}
+		} else {
+			println(bench.step_message_ok(test_name))
 		}
 
+		reporter.clear()
 		store.delete(store.cur_dir)
 	}
 	assert bench.nfail == 0

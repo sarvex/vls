@@ -2,6 +2,7 @@ module analyzer
 
 import tree_sitter
 import tree_sitter_v as v
+import ast
 import os
 
 const (
@@ -9,7 +10,7 @@ const (
 	import os
 	import env
 	'
-	sample_content_bytes = sample_content.runes()
+	sample_content_bytes = analyzer.Runes(sample_content.runes())
 	vexe_path            = os.dir(os.getenv('VEXE'))
 	// not a real path
 	file_path            = '@TEST/hello.v'
@@ -18,10 +19,9 @@ const (
 	]
 )
 
-fn parse_content() &C.TSTree {
-	mut parser := tree_sitter.new_parser()
-	parser.set_language(v.language)
-	return parser.parse_string(analyzer.sample_content)
+fn parse_content() &tree_sitter.Tree<v.NodeType> {
+	mut p := ast.new_parser()
+	return p.parse_string(source: analyzer.sample_content)
 }
 
 fn test_scan_imports() ? {
@@ -30,8 +30,12 @@ fn test_scan_imports() ? {
 		reporter: &Collector{}
 	}
 
+	mut imp := Importer{
+		store: unsafe { store }
+	}
+
 	store.set_active_file_path(analyzer.file_path, 1)
-	imports := store.scan_imports(tree, analyzer.sample_content_bytes)
+	imports := imp.scan_imports(tree, analyzer.sample_content_bytes)
 	assert imports.len == 2
 	assert imports[0].absolute_module_name == 'os'
 	assert imports[1].absolute_module_name == 'env'
@@ -43,13 +47,17 @@ fn test_inject_paths_of_new_imports() ? {
 		reporter: &Collector{}
 	}
 
+	mut imp := Importer {
+		store: unsafe { store }
+	}
+
 	store.set_active_file_path(analyzer.file_path, 1)
-	mut imports := store.scan_imports(tree, analyzer.sample_content_bytes)
+	mut imports := imp.scan_imports(tree, analyzer.sample_content_bytes)
 	assert imports.len == 2
 	assert imports[0].absolute_module_name == 'os'
 	assert imports[1].absolute_module_name == 'env'
 
-	store.inject_paths_of_new_imports(mut imports, os.join_path(analyzer.vexe_path, 'vlib'))
+	imp.inject_paths_of_new_imports(mut imports, os.join_path(analyzer.vexe_path, 'vlib'))
 
 	assert imports[0].resolved == true
 	assert imports[0].path == os.join_path(analyzer.vexe_path, 'vlib', 'os')
@@ -82,19 +90,18 @@ fn test_import_modules_from_tree() ? {
 }
 
 fn test_import_modules_with_edits() ? {
-	mut parser := tree_sitter.new_parser()
-	parser.set_language(v.language)
+	mut p := ast.new_parser()
 	sample_content2 := '
 	import os
 	'
 
-	mut tree := parser.parse_string(sample_content2)
+	mut tree := p.parse_string(source: sample_content2)
 	mut store := &Store{
 		reporter: &Collector{}
 		default_import_paths: analyzer.test_lookup_paths
 	}
 	store.set_active_file_path(analyzer.file_path, 1)
-	store.import_modules_from_tree(tree, sample_content2.runes())
+	store.import_modules_from_tree(tree, Runes(sample_content2.runes()))
 	store.cleanup_imports()
 
 	assert store.imports[store.cur_dir].len == 1
@@ -113,7 +120,7 @@ fn test_import_modules_with_edits() ? {
 	'
 
 	// conform the tree to the new content
-	tree.edit(
+	tree.raw_tree.edit(
 		start_byte: u32(10)
 		old_end_byte: u32(10)
 		new_end_byte: u32(11)
@@ -122,8 +129,8 @@ fn test_import_modules_with_edits() ? {
 		new_end_point: C.TSPoint{u32(1), u32(9)}
 	)
 
-	new_tree := parser.parse_string_with_old_tree(new_content, tree)
-	store.import_modules_from_tree(new_tree, new_content.runes())
+	new_tree := p.parse_string(source: new_content, tree: tree.raw_tree)
+	store.import_modules_from_tree(new_tree, analyzer.Runes(new_content.runes()))
 	store.cleanup_imports()
 
 	assert store.imports[store.cur_dir].len == 0
@@ -131,7 +138,7 @@ fn test_import_modules_with_edits() ? {
 	assert store.dependency_tree.has(os.join_path(analyzer.vexe_path, 'vlib', 'os')) == false
 
 	// go back to old
-	new_tree.edit(
+	new_tree.raw_tree.edit(
 		start_byte: u32(10)
 		old_end_byte: u32(10)
 		new_end_byte: u32(10)
@@ -140,8 +147,8 @@ fn test_import_modules_with_edits() ? {
 		new_end_point: C.TSPoint{u32(1), u32(8)}
 	)
 
-	new_new_tree := parser.parse_string_with_old_tree(sample_content2, new_tree)
-	store.import_modules_from_tree(new_new_tree, sample_content2.runes())
+	new_new_tree := p.parse_string(source: sample_content2, tree: new_tree.raw_tree)
+	store.import_modules_from_tree(new_new_tree, analyzer.Runes(sample_content2.runes()))
 	store.cleanup_imports()
 
 	assert store.imports[store.cur_dir].len == 1

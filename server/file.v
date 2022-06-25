@@ -1,25 +1,17 @@
 module server
 
-// import tree_sitter
+import ast
 import lsp
+import ropes
 import analyzer
 
 struct File {
 mut:
 	uri            lsp.DocumentUri
-	source         []rune
-	tree           &C.TSTree       [required]
+	source         &ropes.Rope
+	tree           &ast.Tree [required]
 	store_location analyzer.FileLocation
-	version        int = 1
-}
-
-[unsafe]
-fn (file &File) free() {
-	unsafe {
-		file.source.free()
-		file.version = 1
-		file.tree.free()
-	}
+	version int = 1
 }
 
 fn (file &File) get_offset(line int, col int) int {

@@ -20,6 +20,14 @@ fn (mut h TestHandler) handle_jsonrpc(req &jsonrpc.Request, mut wr jsonrpc.Respo
 
 			wr.write(RpcResult<int>{ result: res })
 		}
+		'mirror' {
+			texts := req.decode_params<[]string>()?
+			if texts.len == 0 || texts[0] == '0' {
+				wr.write(jsonrpc.null)
+				return
+			}
+			wr.write(RpcResult<string>{texts[0]})
+		}
 		'hello' {
 			wr.write(RpcResult<string>{'Hello world!'})
 		}
@@ -28,7 +36,7 @@ fn (mut h TestHandler) handle_jsonrpc(req &jsonrpc.Request, mut wr jsonrpc.Respo
 			wr.write(RpcResult<string>{'triggered'})
 		}
 		else {
-			return jsonrpc.response_error(jsonrpc.method_not_found).err()
+			return jsonrpc.response_error(error: jsonrpc.method_not_found).err()
 		}
 	}
 }
@@ -53,6 +61,10 @@ fn test_server() ? {
 
 	client.send<string, RpcResult<int>>('multiply', 'test') or {
 		assert err.msg() == 'Method not found.'
+	}
+
+	client.send<[]string, RpcResult<string>>('mirror', ['0']) or {
+		assert err is none
 	}
 }
 

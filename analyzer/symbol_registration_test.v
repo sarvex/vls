@@ -1,15 +1,15 @@
 import os
-import tree_sitter
-import tree_sitter_v as v
+import ast
 import test_utils
 import benchmark
 import analyzer.an_test_utils
-import analyzer { Collector, Store, SymbolAnalyzer, new_tree_cursor, register_builtin_symbols }
+import analyzer { Collector, Store, SymbolAnalyzer, setup_builtin, new_tree_cursor, Runes }
+import v.util.diff
+import term
 
 fn test_symbol_registration() ? {
-	mut parser := tree_sitter.new_parser()
-	parser.set_language(v.language)
-
+	diff_cmd := diff.find_working_diff_command() or { '' }
+	mut p := ast.new_parser()
 	mut bench := benchmark.new_benchmark()
 	vlib_path := os.join_path(os.dir(os.getenv('VEXE')), 'vlib')
 	mut reporter := &Collector{}
@@ -17,15 +17,8 @@ fn test_symbol_registration() ? {
 		reporter: reporter
 		default_import_paths: [vlib_path]
 	}
-	mut builtin_import, _ := store.add_import(
-		resolved: true
-		module_name: 'builtin'
-		path: os.join_path(vlib_path, 'builtin')
-	)
-	mut imports := [builtin_import]
-	store.register_auto_import(builtin_import, '')
-	register_builtin_symbols(mut store, builtin_import)
-	store.import_modules(mut imports)
+
+	setup_builtin(mut store, os.join_path(vlib_path, 'builtin'))
 
 	mut sym_analyzer := SymbolAnalyzer{
 		store: store
@@ -35,7 +28,7 @@ fn test_symbol_registration() ? {
 	test_files_dir := test_utils.get_test_files_path(@FILE)
 	test_files := test_utils.load_test_file_paths(test_files_dir, 'symbol_registration') or {
 		bench.fail()
-		eprintln(bench.step_message_fail(err.msg()))
+		println(bench.step_message_fail(err.msg()))
 		assert false
 		return
 	}
@@ -48,7 +41,7 @@ fn test_symbol_registration() ? {
 		test_name := os.base(test_file_path)
 		content := os.read_file(test_file_path) or {
 			bench.fail()
-			eprintln(bench.step_message_fail('file $test_file_path is missing'))
+			println(bench.step_message_fail('file $test_file_path is missing'))
 			continue
 		}
 
@@ -66,16 +59,23 @@ fn test_symbol_registration() ? {
 		}
 
 		println(bench.step_message('Testing $test_name'))
-		tree := parser.parse_string(src)
-		sym_analyzer.src_text = src.runes()
-		sym_analyzer.cursor = new_tree_cursor(tree.root_node())
-		symbols := sym_analyzer.analyze()
+		tree := p.parse_string(source: src)
+		sym_analyzer.src_text = Runes(src.runes())
+		mut cursor := new_tree_cursor(tree.root_node())
+		symbols := sym_analyzer.analyze_from_cursor(mut cursor)
 		result := an_test_utils.sexpr_str_symbol_array(symbols)
-		assert test_utils.newlines_to_spaces(expected) == result
-		println(bench.step_message_ok(test_name))
-
-		unsafe {
-			sym_analyzer.src_text.free()
+		expected_trimmed := test_utils.newlines_to_spaces(expected)
+		term.clear_previous_line()
+		if result != expected_trimmed {
+			if diff_cmd.len != 0 {
+				bench.fail()
+				println(bench.step_message_fail(test_name))
+				println(diff.color_compare_strings(diff_cmd, 'vls_symbol_registration_test', expected_trimmed, result))
+			} else {
+				assert result == expected_trimmed
+			}
+		} else {
+			println(bench.step_message_ok(test_name))
 		}
 
 		store.delete(store.cur_dir)

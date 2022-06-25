@@ -1,5 +1,7 @@
 module analyzer
 
+pub interface ReportData{}
+
 pub enum ReportKind {
 	error
 	warning
@@ -9,10 +11,12 @@ pub enum ReportKind {
 pub struct Report {
 pub:
 	kind      ReportKind
+	code      string
 	message   string
 	file_path string
 	source    string
 	range     C.TSRange
+	data      ReportData = 1
 }
 
 pub struct ReporterPreferences {
@@ -38,6 +42,12 @@ pub mut:
 	errors   []Report
 	warnings []Report
 	notices  []Report
+}
+
+pub fn (mut c Collector) clear() {
+	c.errors.clear()
+	c.warnings.clear()
+	c.notices.clear()
 }
 
 pub fn (mut c Collector) report(r Report) {

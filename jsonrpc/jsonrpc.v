@@ -10,7 +10,7 @@ import io
 
 pub const version = '2.0'
 
-// see 
+// see
 // - https://www.jsonrpc.org/specification#error_object
 // - http://xmlrpc-epi.sourceforge.net/specs/rfc.fault_codes.php
 pub const (
@@ -30,10 +30,21 @@ pub const (
 	server_not_initialized = error_with_code('Server not initialized.', -32002)
 	unknown_error          = error_with_code('Unknown error.', -32001)
 	server_error_end       = error_with_code('Error occurred when stopping the server.', -32000)
+	error_codes            = [
+		parse_error.code(), 
+		invalid_request.code(), 
+		method_not_found.code(), 
+		invalid_params.code(), 
+		internal_error.code(),
+		server_error_start.code(),
+		server_not_initialized.code(),
+		server_error_end.code(),
+		unknown_error.code()
+	]
 )
 
 // Null represents the null value in JSON.
-struct Null {}
+pub struct Null {}
 
 pub const null = Null{}
 
@@ -97,9 +108,9 @@ fn encode_response<T>(resp Response<T>, mut writer io.Writer) {
 		writer.write(err.bytes()) or {}
 	} else {
 		writer.write(result_field_in_u8) or {}
-		if typeof(resp.result).name == 'jsonrpc.Null' {
+		$if T is Null {
 			writer.write(null_in_u8) or {}
-		} else {
+		} $else {
 			res := json.encode(resp.result)
 			writer.write(res.bytes()) or {}
 		}
@@ -107,11 +118,11 @@ fn encode_response<T>(resp Response<T>, mut writer io.Writer) {
 	writer.write([u8(`}`)]) or {}
 }
 
-// NotificationMessage is a Request object without the ID. A Request object that is a 
-// Notification signifies the Client's lack of interest in the corresponding Response object, 
-// and as such no Response object needs to be returned to the client. The Server MUST NOT reply 
+// NotificationMessage is a Request object without the ID. A Request object that is a
+// Notification signifies the Client's lack of interest in the corresponding Response object,
+// and as such no Response object needs to be returned to the client. The Server MUST NOT reply
 // to a Notification, including those that are within a batch request.
-// 
+//
 // Notifications are not confirmable by definition, since they do not have a Response object to be
 // returned. As such, the Client would not be aware of any errors (like e.g. "Invalid params","Internal error").
 // https://www.jsonrpc.org/specification#notification
@@ -134,7 +145,7 @@ pub fn (notif NotificationMessage<T>) json() string {
 
 fn encode_notification<T>(notif jsonrpc.NotificationMessage<T>, mut writer io.Writer) {
 	writer.write('{"jsonrpc":"$jsonrpc.version","method":"$notif.method","params":'.bytes()) or {}
-	$if notif.params is Null {
+	$if T is Null {
 		writer.write(null_in_u8) or {}
 	} $else {
 		res := json.encode(notif.params)
@@ -143,7 +154,7 @@ fn encode_notification<T>(notif jsonrpc.NotificationMessage<T>, mut writer io.Wr
 	writer.write([u8(`}`)]) or {}
 }
 
-// ResponseError is a representation of an error when a rpc call encounters an error. 
+// ResponseError is a representation of an error when a rpc call encounters an error.
 //When a rpc call encounters an error, the Response Object MUST contain the error member
 // with a value that is a Object with the following members:
 // https://www.jsonrpc.org/specification#error_object
@@ -167,11 +178,18 @@ pub fn (e ResponseError) err() IError {
 	return IError(e)
 }
 
+[params]
+pub struct ResponseErrorGeneratorParams {
+	error IError [required]
+	data  string
+}
+
 // response_error creates a ResponseError from the given IError.
 [inline]
-pub fn response_error(err IError) ResponseError {
+pub fn response_error(params ResponseErrorGeneratorParams) ResponseError {
 	return ResponseError{
-		code: err.code()
-		message: err.msg()
+		code: params.error.code()
+		message: params.error.msg()
+		data: params.data
 	}
 }
