@@ -99,6 +99,11 @@ fn traverse_node2(starting_node ast.Node, offset u32) ast.Node {
 	return traverse_node2(direct_named_child, offset)
 }
 
+fn closest_named_child_2(starting_node ast.RichNode, offset u32) ast.RichNode {
+	return closest_named_child(starting_node.raw_node, offset).with(starting_node.src)
+}
+
+
 fn closest_named_child(starting_node ast.Node, offset u32) ast.Node {
 	named_child_count := starting_node.named_child_count()
 	mut selected_node := starting_node
@@ -121,6 +126,10 @@ const other_symbol_node_types = [v.NodeType.assignment_statement, .call_expressi
 // closest_symbol_node_parent traverse back from child
 // to the nearest node that has a valid, lookup-able symbol node
 // (nodes with names, module name, and etc.)
+fn closest_symbol_node_parent_2(child_node ast.RichNode) ast.RichNode {
+	return closest_symbol_node_parent(child_node.raw_node).with(child_node.src)
+}
+
 fn closest_symbol_node_parent(child_node ast.Node) ast.Node {
 	parent_node := child_node.parent() or { return child_node }
 	parent_type_name := parent_node.type_name

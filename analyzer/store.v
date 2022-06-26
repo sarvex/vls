@@ -2,7 +2,6 @@ module analyzer
 
 import os
 import analyzer.depgraph
-import tree_sitter
 import ast
 
 pub struct Store {
@@ -378,40 +377,36 @@ pub fn (mut ss Store) get_scope_from_node(node ast.Node) ?&ScopeTree {
 }
 
 // symbol_name_from_node extracts the symbol's kind, name, and module name from the given node
-pub fn symbol_name_from_node(node ast.Node, src_text tree_sitter.SourceText) (SymbolKind, string, string) {
-	// if node.is_null() {
-	// 	return SymbolKind.typedef, '', 'void'
-	// }
-
+pub fn symbol_name_from_node(node ast.RichNode) (SymbolKind, string, string) {
 	mut module_name := ''
 	mut symbol_name := ''
 
 	match node.type_name {
 		.qualified_type {
 			if module_node := node.child_by_field_name('module') {
-				module_name = module_node.text(src_text)
+				module_name = module_node.text()
 			}
 
 			if name_node := node.child_by_field_name('name') {
-				symbol_name = name_node.text(src_text)
+				symbol_name = name_node.text()
 			}
 
 			return SymbolKind.placeholder, module_name, symbol_name
 		}
 		.pointer_type {
 			if child_type_node := node.named_child(0) {
-				_, module_name, symbol_name = symbol_name_from_node(child_type_node, src_text)
+				_, module_name, symbol_name = symbol_name_from_node(child_type_node)
 			}
 			return SymbolKind.ref, module_name, '&' + symbol_name
 		}
 		.array_type, .fixed_array_type {
 			mut limit := ''
 			if limit_field := node.child_by_field_name('limit') {
-				limit = limit_field.text(src_text)
+				limit = limit_field.text()
 			}
 
 			if el_node := node.child_by_field_name('element') {
-				_, module_name, symbol_name = symbol_name_from_node(el_node, src_text)
+				_, module_name, symbol_name = symbol_name_from_node(el_node)
 			}
 			return SymbolKind.array_, module_name, '[$limit]' + symbol_name
 		}
@@ -423,15 +418,13 @@ pub fn symbol_name_from_node(node ast.Node, src_text tree_sitter.SourceText) (Sy
 			mut key_symbol_text := ''
 			mut value_symbol_text := ''
 			if key_node := node.child_by_field_name('key') {
-				key_symbol_text = key_node.text(src_text)
-				_, key_module_name, key_symbol_name = symbol_name_from_node(key_node,
-					src_text)
+				key_symbol_text = key_node.text()
+				_, key_module_name, key_symbol_name = symbol_name_from_node(key_node)
 			}
 
 			if value_node := node.child_by_field_name('value') {
-				value_symbol_text = value_node.text(src_text)
-				_, val_module_name, val_symbol_name = symbol_name_from_node(value_node,
-					src_text)
+				value_symbol_text = value_node.text()
+				_, val_module_name, val_symbol_name = symbol_name_from_node(value_node)
 			}
 
 			if (key_module_name.len != 0 && val_module_name.len == 0)
@@ -445,22 +438,22 @@ pub fn symbol_name_from_node(node ast.Node, src_text tree_sitter.SourceText) (Sy
 				module_name = ''
 			}
 
-			return SymbolKind.map_, '', node.text(src_text)
+			return SymbolKind.map_, '', node.text()
 		}
 		.generic_type {
 			if child_type_node := node.named_child(0) {
-				return symbol_name_from_node(child_type_node, src_text)
+				return symbol_name_from_node(child_type_node)
 			}
 		}
 		.channel_type {
 			if child_type_node := node.named_child(0) {
-				_, module_name, symbol_name = symbol_name_from_node(child_type_node, src_text)
+				_, module_name, symbol_name = symbol_name_from_node(child_type_node)
 			}
 			return SymbolKind.chan_, module_name, 'chan ' + symbol_name
 		}
 		.option_type {
 			if child_type_node := node.named_child(0) {
-				_, module_name, symbol_name = symbol_name_from_node(child_type_node, src_text)
+				_, module_name, symbol_name = symbol_name_from_node(child_type_node)
 			}
 			if symbol_name == 'void' {
 				symbol_name = ''
@@ -472,13 +465,13 @@ pub fn symbol_name_from_node(node ast.Node, src_text tree_sitter.SourceText) (Sy
 		}
 		.variadic_type {
 			if child_type_node := node.named_child(0) {
-				_, module_name, symbol_name = symbol_name_from_node(child_type_node, src_text)
+				_, module_name, symbol_name = symbol_name_from_node(child_type_node)
 			}
 			return SymbolKind.variadic, module_name, '...' + symbol_name
 		}
 		else {
 			// type_identifier should go here
-			return SymbolKind.placeholder, module_name, node.text(src_text)
+			return SymbolKind.placeholder, module_name, node.text()
 		}
 	}
 
@@ -486,12 +479,12 @@ pub fn symbol_name_from_node(node ast.Node, src_text tree_sitter.SourceText) (Sy
 }
 
 // find_symbol_by_type_node returns a symbol based on the given type node
-pub fn (mut store Store) find_symbol_by_type_node(node ast.Node, src_text tree_sitter.SourceText) ?&Symbol {
-	if node.is_null() || src_text.len() == 0 {
+pub fn (mut store Store) find_symbol_by_type_node(node ast.RichNode) ?&Symbol {
+	if node.raw_node.is_null() || node.src.len() == 0 {
 		return none
 	}
 
-	sym_kind, module_name, symbol_name := symbol_name_from_node(node, src_text)
+	sym_kind, module_name, symbol_name := symbol_name_from_node(node)
 	// defer {
 	// 	unsafe {
 	// 		module_name.free()
@@ -502,12 +495,12 @@ pub fn (mut store Store) find_symbol_by_type_node(node ast.Node, src_text tree_s
 	if sym_kind == .function_type {
 		mut parameters := []&Symbol{}
 		if param_node := node.child_by_field_name('parameters') {
-			parameters << extract_parameter_list(param_node, mut store, src_text)
+			parameters << extract_parameter_list(param_node, mut store)
 		}
 
 		mut return_sym := unsafe { void_sym }
 		if result_node := node.child_by_field_name('result') {
-			return_sym = store.find_symbol_by_type_node(result_node, src_text) or { void_sym }
+			return_sym = store.find_symbol_by_type_node(result_node) or { void_sym }
 		}
 
 		return store.find_fn_symbol(module_name, return_sym, parameters) or {
@@ -541,22 +534,22 @@ pub fn (mut store Store) find_symbol_by_type_node(node ast.Node, src_text tree_s
 		match sym_kind {
 			.array_ {
 				el_node := node.child_by_field_name('element') ?
-				mut el_sym := store.find_symbol_by_type_node(el_node, src_text) ?
+				mut el_sym := store.find_symbol_by_type_node(el_node) ?
 				new_sym.add_child(mut el_sym, false) or {}
 			}
 			.map_ {
 				key_node := node.child_by_field_name('key') ?
-				mut key_sym := store.find_symbol_by_type_node(key_node, src_text) ?
+				mut key_sym := store.find_symbol_by_type_node(key_node) ?
 				new_sym.add_child(mut key_sym, false) or {}
 
 				value_node := node.child_by_field_name('value') ?
-				mut val_sym := store.find_symbol_by_type_node(value_node, src_text) ?
+				mut val_sym := store.find_symbol_by_type_node(value_node) ?
 				new_sym.add_child(mut val_sym, false) or {}
 			}
 			.chan_, .ref, .optional {
 				if symbol_name != '?' {
 					child_type_node := node.named_child(0) ?
-					mut ref_sym := store.find_symbol_by_type_node(child_type_node, src_text) ?
+					mut ref_sym := store.find_symbol_by_type_node(child_type_node) ?
 					if ref_sym.name.len != 0 {
 						new_sym.parent_sym = ref_sym
 					} else {
@@ -575,8 +568,8 @@ pub fn (mut store Store) find_symbol_by_type_node(node ast.Node, src_text tree_s
 // infer_symbol_from_node returns the specified symbol based on the given node.
 // This is different from infer_value_type_from_node as this returns the symbol
 // instead of symbol's return type or parent for example
-pub fn (mut ss Store) infer_symbol_from_node(node ast.Node, src_text tree_sitter.SourceText) ?&Symbol {
-	if node.is_null() {
+pub fn (mut ss Store) infer_symbol_from_node(node ast.RichNode) ?&Symbol {
+	if node.raw_node.is_null() {
 		return none
 	}
 
@@ -592,22 +585,22 @@ pub fn (mut ss Store) infer_symbol_from_node(node ast.Node, src_text tree_sitter
 			// Find first in symbols
 			// find the symbol in scopes
 			// return void if none
-			ident_text := node.text(src_text)
+			ident_text := node.text()
 			return ss.opened_scopes[ss.cur_file_path].get_symbol_with_range(ident_text,
 				node.range()) or { ss.find_symbol(module_name, ident_text) ? }
 		}
 		.mutable_identifier {
-			first_child := node.named_child(0) ?
-			return ss.infer_symbol_from_node(first_child, src_text)
+			first_child := node.named_child(0)?
+			return ss.infer_symbol_from_node(first_child)
 		}
 		.field_identifier {
-			mut parent := node.parent() ?
+			mut parent := node.parent()?
 			for parent.type_name in [.keyed_element, .literal_value] {
-				parent = parent.parent() ?
+				parent = parent.parent()?
 			}
 
-			parent_sym := ss.infer_symbol_from_node(parent, src_text) or { void_sym }
-			ident_text := node.text(src_text)
+			parent_sym := ss.infer_symbol_from_node(parent) or { void_sym }
+			ident_text := node.text()
 			if !parent_sym.is_void() {
 				if parent.type_name == .struct_field_declaration {
 					return parent_sym
@@ -622,17 +615,17 @@ pub fn (mut ss Store) infer_symbol_from_node(node ast.Node, src_text tree_sitter
 		}
 		.type_selector_expression {
 			// TODO: assignment_declaration
-			// if parent.type_name() != 'literal_value' {
+			// if parent.raw_type_name() != 'literal_value' {
 			// 	parent = parent.parent()
 			// }
 			field_node := node.child_by_field_name('field_name') ?
 			if type_node := node.child_by_field_name('type') {
-				parent_sym := ss.infer_symbol_from_node(type_node, src_text) ?
-				child_sym := parent_sym.children_syms.get(field_node.text(src_text)) ?
+				parent_sym := ss.infer_symbol_from_node(type_node) ?
+				child_sym := parent_sym.children_syms.get(field_node.text()) ?
 				return child_sym
 			} else {
 				// for shorhand enum
-				enum_value := field_node.text(src_text)
+				enum_value := field_node.text()
 				for sym in ss.symbols[ss.cur_dir] {
 					if sym.kind != .enum_ {
 						continue
@@ -643,23 +636,23 @@ pub fn (mut ss Store) infer_symbol_from_node(node ast.Node, src_text tree_sitter
 			}
 		}
 		.type_initializer {
-			return ss.find_symbol_by_type_node(node.child_by_field_name('type') ?, src_text)
+			return ss.find_symbol_by_type_node(node.child_by_field_name('type') ?)
 		}
 		.type_identifier, .array, .array_type, .map_type, .pointer_type, .variadic_type,
 		.builtin_type, .channel_type, .fn_literal {
-			return ss.find_symbol_by_type_node(node, src_text)
+			return ss.find_symbol_by_type_node(node)
 		}
 		.const_spec {
-			return ss.find_symbol_by_type_node(node.child_by_field_name('name') ?, src_text)
+			return ss.find_symbol_by_type_node(node.child_by_field_name('name')?)
 		}
 		.selector_expression {
-			operand := node.child_by_field_name('operand') ?
-			mut root_sym := ss.infer_symbol_from_node(operand, src_text) or { void_sym }
+			operand := node.child_by_field_name('operand')?
+			mut root_sym := ss.infer_symbol_from_node(operand) or { void_sym }
 			if !root_sym.is_void() {
 				if root_sym.is_returnable() {
 					root_sym = root_sym.return_sym
 				}
-				child_name := node.child_by_field_name('field') ?.text(src_text)
+				child_name := node.child_by_field_name('field')?.text()
 				return root_sym.children_syms.get(child_name) or {
 					if root_sym.kind == .ref {
 						root_sym = root_sym.parent_sym
@@ -682,49 +675,49 @@ pub fn (mut ss Store) infer_symbol_from_node(node ast.Node, src_text tree_sitter
 				return none
 			}
 
-			module_name = node.child_by_field_name('operand') ?.text(src_text)
-			type_name = node.child_by_field_name('field') ?.text(src_text)
+			module_name = node.child_by_field_name('operand')?.text()
+			type_name = node.child_by_field_name('field')?.text()
 		}
 		.keyed_element {
 			mut parent := node.parent() ?
 			if parent.type_name == .literal_value || parent.type_name == .map_ {
-				parent = parent.parent() ?
+				parent = parent.parent()?
 			}
 			mut selected_node := node.child_by_field_name('name') ?
 			if !selected_node.type_name.is_identifier() {
 				selected_node = node.child_by_field_name('value') ?
 			}
 			if parent.type_name == .literal_value {
-				parent_sym := ss.infer_symbol_from_node(parent, src_text) ?
-				return parent_sym.children_syms.get(selected_node.text(src_text)) or {
+				parent_sym := ss.infer_symbol_from_node(parent) ?
+				return parent_sym.children_syms.get(selected_node.text()) or {
 					if parent_sym.name == 'map' || parent_sym.name == 'array' {
-						return ss.infer_symbol_from_node(selected_node, src_text)
+						return ss.infer_symbol_from_node(selected_node)
 					}
 					return err
 				}
 			} else {
-				return ss.infer_symbol_from_node(selected_node, src_text)
+				return ss.infer_symbol_from_node(selected_node)
 			}
 		}
 		.call_expression {
 			function_node := node.child_by_field_name('function') ?
-			return ss.infer_symbol_from_node(function_node, src_text)
+			return ss.infer_symbol_from_node(function_node)
 		}
 		.parameter_declaration {
-			mut parent := node.parent() ?
+			mut parent := node.parent()?
 			for parent.type_name !in [.function_declaration, .interface_spec] {
-				parent = parent.parent() ?
-				if parent.is_null() {
+				parent = parent.parent()?
+				if parent.raw_node.is_null() {
 					return none
 				}
 			}
 
 			if parent.type_name == .function_declaration {
-				parent = parent.child_by_field_name('name') ?
+				parent = parent.child_by_field_name('name')?
 			}
 
-			parent_sym := ss.infer_symbol_from_node(parent, src_text) ?
-			child_sym := parent_sym.children_syms.get(node.child_by_field_name('name') ?.text(src_text)) ?
+			parent_sym := ss.infer_symbol_from_node(parent) ?
+			child_sym := parent_sym.children_syms.get(node.child_by_field_name('name')?.text()) ?
 			return child_sym
 		}
 		.struct_field_declaration, .interface_spec {
@@ -733,32 +726,30 @@ pub fn (mut ss Store) infer_symbol_from_node(node ast.Node, src_text tree_sitter
 				parent = parent.parent() or { return none }
 			}
 
-			// eprintln(parent.type_name())
-			parent_sym := ss.infer_symbol_from_node(parent.child_by_field_name('name') ?,
-				src_text) ?
-			child_sym := parent_sym.children_syms.get(node.child_by_field_name('name') ?.text(src_text)) ?
+			// eprintln(parent.raw_type_name())
+			parent_sym := ss.infer_symbol_from_node(parent.child_by_field_name('name')?)?
+			child_sym := parent_sym.children_syms.get(node.child_by_field_name('name')?.text())?
 			return child_sym
 		}
 		.function_declaration {
 			name_node := node.child_by_field_name('name') ?
 			receiver_node := node.child_by_field_name('receiver') or {
-				return ss.infer_symbol_from_node(name_node, src_text)
+				return ss.infer_symbol_from_node(name_node)
 			}
 
 			receiver_param_count := receiver_node.named_child_count()
 			if receiver_param_count != 0 {
 				receiver_param_node := receiver_node.named_child(0) ?
-				parent_sym := ss.infer_symbol_from_node(receiver_param_node.child_by_field_name('type') ?,
-					src_text) ?
-				child_sym := parent_sym.children_syms.get(name_node.text(src_text)) ?
-				return child_sym
+				receiver_type_node := receiver_param_node.child_by_field_name('type')?
+				parent_sym := ss.infer_symbol_from_node(receiver_type_node)?
+				return parent_sym.children_syms.get(name_node.text())
 			} else {
-				return ss.infer_symbol_from_node(name_node, src_text)
+				return ss.infer_symbol_from_node(name_node)
 			}
 		}
 		else {
 			// eprintln(node_type)
-			// eprintln(node.parent().type_name())
+			// eprintln(node.parent().raw_type_name())
 			// return analyzer.void_sym
 		}
 	}
@@ -767,7 +758,7 @@ pub fn (mut ss Store) infer_symbol_from_node(node ast.Node, src_text tree_sitter
 }
 
 // infer_value_type_from_node returns the symbol based on the given node
-pub fn (mut ss Store) infer_value_type_from_node(node ast.Node, src_text tree_sitter.SourceText) &Symbol {
+pub fn (mut ss Store) infer_value_type_from_node(node ast.RichNode) &Symbol {
 	if node.is_null() {
 		return void_sym
 	}
@@ -796,7 +787,7 @@ pub fn (mut ss Store) infer_value_type_from_node(node ast.Node, src_text tree_si
 		}
 		.array {
 			if child_type_node := node.child(1) {
-				type_name = '[]' + ss.infer_value_type_from_node(child_type_node, src_text).name
+				type_name = '[]' + ss.infer_value_type_from_node(child_type_node).name
 			}
 		}
 		.binary_expression {
@@ -804,22 +795,22 @@ pub fn (mut ss Store) infer_value_type_from_node(node ast.Node, src_text tree_si
 			left_node := node.child_by_field_name('left') or { return void_sym }
 			// op_node := node.child_by_field_name('operator')
 			// right_node := node.child_by_field_name('right')
-			mut left_sym := ss.infer_value_type_from_node(left_node, src_text)
+			mut left_sym := ss.infer_value_type_from_node(left_node)
 			if left_sym.is_returnable() {
 				left_sym = left_sym.return_sym
 			}
-			// right_sym := ss.infer_value_type_from_node(right_node.text(src_text))
+			// right_sym := ss.infer_value_type_from_node(right_node.text())
 			return left_sym
 		}
 		.unary_expression {
 			operator_node := node.child_by_field_name('operator') or { return void_sym }
 			operand_node := node.child_by_field_name('operand') or { return void_sym }
-			mut op_sym := ss.infer_value_type_from_node(operand_node, src_text)
+			mut op_sym := ss.infer_value_type_from_node(operand_node)
 			if op_sym.is_returnable() {
 				op_sym = op_sym.return_sym
 			}
 
-			operator_type_name := operator_node.raw_node.type_name()
+			operator_type_name := operator_node.raw_type_name()
 			if operator_type_name in ['+', '-', '~', '^', '*'] && op_sym.name !in numeric_types {
 				return void_sym
 			} else if operator_type_name == '!' && op_sym.name != 'bool' {
@@ -835,14 +826,14 @@ pub fn (mut ss Store) infer_value_type_from_node(node ast.Node, src_text tree_si
 			}
 		}
 		.identifier {
-			got_sym := ss.infer_symbol_from_node(node, src_text) or { void_sym }
+			got_sym := ss.infer_symbol_from_node(node) or { void_sym }
 			if got_sym.is_returnable() {
 				return got_sym.return_sym
 			}
 			return got_sym
 		}
 		.call_expression {
-			got_sym := ss.infer_symbol_from_node(node, src_text) or { void_sym }
+			got_sym := ss.infer_symbol_from_node(node) or { void_sym }
 			node_count := node.named_child_count()
 			if got_sym.is_returnable() {
 				if last_node := node.named_child(node_count - 1) {
@@ -857,29 +848,29 @@ pub fn (mut ss Store) infer_value_type_from_node(node ast.Node, src_text tree_si
 		}
 		.type_selector_expression, .type_cast_expression {
 			if type_node := node.child_by_field_name('type') {
-				if parent_sym := ss.infer_symbol_from_node(type_node, src_text) {
+				if parent_sym := ss.infer_symbol_from_node(type_node) {
 					return parent_sym
 				}
 			}
 			return void_sym
 		}
 		// 'argument_list' {
-		// 	return ss.infer_value_type_from_node(node.parent(), src_text)
+		// 	return ss.infer_value_type_from_node(node.parent())
 		// }
 		.unsafe_expression {
 			if block_node := node.named_child(0) {
-				block_child_len := node.named_child_count()
+				block_child_len := node.raw_node.named_child_count()
 				if block_child_len != u32(1) {
 					return void_sym
 				}
 
 				if first_node := block_node.named_child(0) {
-					return ss.infer_value_type_from_node(first_node, src_text)
+					return ss.infer_value_type_from_node(first_node)
 				}
 			}
 		}
 		else {
-			return ss.infer_symbol_from_node(node, src_text) or { void_sym }
+			return ss.infer_symbol_from_node(node) or { void_sym }
 		}
 	}
 
@@ -890,7 +881,7 @@ pub fn (mut ss Store) infer_value_type_from_node(node ast.Node, src_text tree_si
 }
 
 // delete_symbol_at_node removes a specific symbol from a specific portion of the node
-pub fn (mut ss Store) delete_symbol_at_node(root_node ast.Node, src tree_sitter.SourceText, at_range C.TSRange) bool {
+pub fn (mut ss Store) delete_symbol_at_node(root_node ast.RichNode, at_range C.TSRange) bool {
 	unsafe { ss.opened_scopes[ss.cur_file_path].free() }
 	nodes := get_nodes_within_range(root_node, at_range) or { return false }
 	for node in nodes {
@@ -899,7 +890,7 @@ pub fn (mut ss Store) delete_symbol_at_node(root_node ast.Node, src tree_sitter.
 			.const_spec, .global_var_spec, .global_var_declaration, .function_declaration,
 			.interface_declaration, .enum_declaration, .type_declaration, .struct_declaration {
 				name_node := node.child_by_field_name('name') or { continue }
-				symbol_name := name_node.text(src)
+				symbol_name := name_node.text()
 				idx := ss.symbols[ss.cur_dir].index(symbol_name)
 				if idx != -1 && idx < ss.symbols[ss.cur_dir].len {
 					language := ss.symbols[ss.cur_dir][idx].language
@@ -942,7 +933,7 @@ pub fn (mut ss Store) delete_symbol_at_node(root_node ast.Node, src tree_sitter.
 				left_side := node.child_by_field_name('left') or { continue }
 				left_count := left_side.named_child_count()
 				for i in u32(0) .. left_count {
-					innermost.remove(left_side.named_child(i) or { continue }.text(src))
+					innermost.remove(left_side.named_child(i) or { continue }.text())
 				}
 			}
 			.import_declaration {

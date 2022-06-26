@@ -1,7 +1,5 @@
 module analyzer
 
-import tree_sitter
-import tree_sitter_v as v
 import ast
 import os
 
@@ -19,9 +17,9 @@ const (
 	]
 )
 
-fn parse_content() &tree_sitter.Tree<v.NodeType> {
+fn parse_content() ast.RichTree {
 	mut p := ast.new_parser()
-	return p.parse_string(source: analyzer.sample_content)
+	return ast.from_tree(p.parse_string(source: analyzer.sample_content)).with(analyzer.sample_content_bytes)
 }
 
 fn test_scan_imports() ? {
@@ -35,7 +33,7 @@ fn test_scan_imports() ? {
 	}
 
 	store.set_active_file_path(analyzer.file_path, 1)
-	imports := imp.scan_imports(tree, analyzer.sample_content_bytes)
+	imports := imp.scan_imports(tree)
 	assert imports.len == 2
 	assert imports[0].absolute_module_name == 'os'
 	assert imports[1].absolute_module_name == 'env'
@@ -52,7 +50,7 @@ fn test_inject_paths_of_new_imports() ? {
 	}
 
 	store.set_active_file_path(analyzer.file_path, 1)
-	mut imports := imp.scan_imports(tree, analyzer.sample_content_bytes)
+	mut imports := imp.scan_imports(tree)
 	assert imports.len == 2
 	assert imports[0].absolute_module_name == 'os'
 	assert imports[1].absolute_module_name == 'env'
@@ -72,7 +70,7 @@ fn test_import_modules_from_tree() ? {
 	}
 
 	store.set_active_file_path(analyzer.file_path, 1)
-	store.import_modules_from_tree(tree, analyzer.sample_content_bytes)
+	store.import_modules_from_tree(tree)
 
 	assert store.imports[store.cur_dir].len == 2
 	assert store.imports[store.cur_dir][0].absolute_module_name == 'os'
@@ -95,13 +93,13 @@ fn test_import_modules_with_edits() ? {
 	import os
 	'
 
-	mut tree := p.parse_string(source: sample_content2)
+	mut tree := ast.from_tree(p.parse_string(source: sample_content2)).with(Runes(sample_content2.runes()))
 	mut store := &Store{
 		reporter: &Collector{}
 		default_import_paths: analyzer.test_lookup_paths
 	}
 	store.set_active_file_path(analyzer.file_path, 1)
-	store.import_modules_from_tree(tree, Runes(sample_content2.runes()))
+	store.import_modules_from_tree(tree)
 	store.cleanup_imports()
 
 	assert store.imports[store.cur_dir].len == 1
@@ -129,8 +127,8 @@ fn test_import_modules_with_edits() ? {
 		new_end_point: C.TSPoint{u32(1), u32(9)}
 	)
 
-	new_tree := p.parse_string(source: new_content, tree: tree.raw_tree)
-	store.import_modules_from_tree(new_tree, analyzer.Runes(new_content.runes()))
+	new_tree := ast.from_tree(p.parse_string(source: new_content, tree: tree.raw_tree.raw_tree)).with(analyzer.Runes(new_content.runes()))
+	store.import_modules_from_tree(new_tree)
 	store.cleanup_imports()
 
 	assert store.imports[store.cur_dir].len == 0
@@ -147,8 +145,8 @@ fn test_import_modules_with_edits() ? {
 		new_end_point: C.TSPoint{u32(1), u32(8)}
 	)
 
-	new_new_tree := p.parse_string(source: sample_content2, tree: new_tree.raw_tree)
-	store.import_modules_from_tree(new_new_tree, analyzer.Runes(sample_content2.runes()))
+	new_new_tree := ast.from_tree(p.parse_string(source: sample_content2, tree: new_tree.raw_tree.raw_tree)).with(analyzer.Runes(sample_content2.runes()))
+	store.import_modules_from_tree(new_new_tree)
 	store.cleanup_imports()
 
 	assert store.imports[store.cur_dir].len == 1

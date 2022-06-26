@@ -9,13 +9,14 @@ fn (mut ls Vls) analyze_file(file File) {
 	ls.reporter.clear(file.uri)
 	file_path := file.uri.path()
 	ls.store.set_active_file_path(file_path, file.version)
-	ls.store.import_modules_from_tree(file.tree, file.source, os.join_path(file.uri.dir_path(),
+	tree := file.rich_tree()
+	ls.store.import_modules_from_tree(tree, os.join_path(file.uri.dir_path(),
 		'modules'), ls.root_uri.path(), os.dir(os.dir(file_path)))
 
-	ls.store.register_symbols_from_tree(file.tree, file.source, false)
+	ls.store.register_symbols_from_tree(tree, false)
 	ls.store.cleanup_imports()
 	if Feature.analyzer_diagnostics in ls.enabled_features {
-		ls.store.analyze(file.tree, file.source)
+		ls.store.analyze(tree)
 	}
 	ls.reporter.publish(mut ls.writer, file.uri)
 }
@@ -115,7 +116,7 @@ pub fn (mut ls Vls) did_change(params lsp.DidChangeTextDocumentParams, mut wr Re
 
 		// remove immediately the symbol
 		if change_text.len == 0 && diff < 0 {
-			ls.store.delete_symbol_at_node(ls.files[uri].tree.root_node(), new_src,
+		ls.store.delete_symbol_at_node(ls.files[uri].rich_tree().root_node(),
 				start_point: lsp_pos_to_tspoint(start_pos)
 				end_point: lsp_pos_to_tspoint(old_end_pos)
 				start_byte: u32(start_idx)

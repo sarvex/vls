@@ -12,6 +12,10 @@ mut:
 	version int = 1
 }
 
+fn (file &File) rich_tree() ast.RichTree {
+	return file.tree.with(file.source)
+}
+
 fn (file &File) get_offset(line int, col int) int {
 	return compute_offset(file.source, line, col)
 }

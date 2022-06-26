@@ -9,10 +9,11 @@ mut:
 	cur_child_idx int  = -1
 	named_only    bool = true
 	child_count   int                                [required]
+	source        tree_sitter.SourceText
 	cursor        tree_sitter.TreeCursor<v.NodeType> [required]
 }
 
-pub fn (mut tc TreeCursor) next() ?ast.Node {
+pub fn (mut tc TreeCursor) next() ?ast.RichNode {
 	for tc.cur_child_idx < tc.child_count {
 		if tc.cur_child_idx == -1 {
 			tc.cursor.to_first_child()
@@ -40,9 +41,9 @@ pub fn (mut tc TreeCursor) to_first_child() bool {
 	return tc.cursor.to_first_child()
 }
 
-pub fn (tc &TreeCursor) current_node() ?ast.Node {
+pub fn (tc &TreeCursor) current_node() ?ast.RichNode {
 	node := tc.cursor.current_node()?
-	return node
+	return ast.Node(node).with(tc.source)
 }
 
 [unsafe]
@@ -54,9 +55,10 @@ pub fn (tc &TreeCursor) free() {
 	}
 }
 
-pub fn new_tree_cursor(root_node ast.Node) TreeCursor {
+pub fn new_tree_cursor(root_node ast.RichNode) TreeCursor {
 	return TreeCursor{
-		child_count: int(root_node.child_count())
-		cursor: root_node.tree_cursor()
+		source: root_node.src
+		child_count: int(root_node.raw_node.child_count())
+		cursor: root_node.raw_node.tree_cursor()
 	}
 }

@@ -6,7 +6,6 @@ import analyzer
 import strings
 import math
 import ast
-import tree_sitter
 
 const temp_formatting_file_path = os.join_path(os.temp_dir(), 'vls_temp_formatting.v')
 
@@ -169,7 +168,7 @@ fn (mut ls Vls) signature_help(params lsp.SignatureHelpParams, mut wr ResponseWr
 	}
 
 	ls.store.set_active_file_path(uri.path(), file.version)
-	sym := ls.store.infer_symbol_from_node(node, file.source) or {
+	sym := ls.store.infer_symbol_from_node(node.with(file.source)) or {
 		return none
 	}
 
@@ -230,9 +229,8 @@ fn (mut ls Vls) signature_help(params lsp.SignatureHelpParams, mut wr ResponseWr
 struct CompletionBuilder {
 mut:
 	store              &analyzer.Store
-	src                tree_sitter.SourceText
 	offset             int
-	parent_node        ast.Node
+	parent_node        ast.RichNode
 	show_global        bool // for displaying global (project) symbols
 	show_local         bool // for displaying local variables
 	filter_return_type &analyzer.Symbol = &analyzer.Symbol(0) // filters results by type
@@ -247,12 +245,12 @@ fn (mut builder CompletionBuilder) add(item lsp.CompletionItem) {
 	builder.completion_items << item
 }
 
-fn (builder CompletionBuilder) is_triggered(node ast.Node, chr string) bool {
-	return node.next_sibling() or { return false }.text(builder.src) == chr
+fn (builder CompletionBuilder) is_triggered(node ast.RichNode, chr string) bool {
+	return node.next_sibling() or { return false }.text() == chr
 		|| builder.ctx.trigger_character == chr
 }
 
-fn (builder CompletionBuilder) is_selector(node ast.Node) bool {
+fn (builder CompletionBuilder) is_selector(node ast.RichNode) bool {
 	return builder.is_triggered(node, '.')
 }
 
@@ -263,7 +261,7 @@ fn (builder CompletionBuilder) has_same_return_type(sym &analyzer.Symbol) bool {
 	return sym == builder.filter_return_type
 }
 
-fn (mut builder CompletionBuilder) build_suggestions(node ast.Node, offset int) {
+fn (mut builder CompletionBuilder) build_suggestions(node ast.RichNode, offset int) {
 	builder.offset = offset
 	builder.build_suggestions_from_node(node)
 	if builder.show_local {
@@ -274,7 +272,7 @@ fn (mut builder CompletionBuilder) build_suggestions(node ast.Node, offset int) 
 	}
 }
 
-fn (mut builder CompletionBuilder) build_suggestions_from_node(node ast.Node) {
+fn (mut builder CompletionBuilder) build_suggestions_from_node(node ast.RichNode) {
 	node_type_name := node.type_name
 	if node_type_name in list_node_types {
 		builder.build_suggestions_from_list(node)
@@ -286,7 +284,7 @@ fn (mut builder CompletionBuilder) build_suggestions_from_node(node ast.Node) {
 }
 
 // suggestions_from_stmt returns a list of results from the extracted Stmt node info.
-fn (mut builder CompletionBuilder) build_suggestions_from_stmt(node ast.Node) {
+fn (mut builder CompletionBuilder) build_suggestions_from_stmt(node ast.RichNode) {
 	match node.type_name {
 		.short_var_declaration {
 			builder.show_local = true
@@ -299,8 +297,7 @@ fn (mut builder CompletionBuilder) build_suggestions_from_stmt(node ast.Node) {
 			left_count := left_node.named_child_count()
 			if expr_list_count == left_count {
 				last_left_node := left_node.named_child(left_count - 1) or { return }
-				builder.filter_return_type = builder.store.infer_value_type_from_node(last_left_node,
-					builder.src)
+				builder.filter_return_type = builder.store.infer_value_type_from_node(last_left_node)
 				builder.show_local = true
 			}
 		}
@@ -311,29 +308,29 @@ fn (mut builder CompletionBuilder) build_suggestions_from_stmt(node ast.Node) {
 }
 
 // suggestions_from_list returns a list of results extracted from the list nodes.
-fn (mut builder CompletionBuilder) build_suggestions_from_list(node ast.Node) {
+fn (mut builder CompletionBuilder) build_suggestions_from_list(node ast.RichNode) {
 	match node.type_name {
 		.identifier_list {
-			parent := closest_symbol_node_parent(node)
+			parent := closest_symbol_node_parent_2(node)
 			builder.build_suggestions_from_node(parent)
 		}
 		.expression_list {
 			// expr_list_count := node.named_child_count()
-			parent := closest_symbol_node_parent(node)
+			parent := closest_symbol_node_parent_2(node)
 			match parent.type_name {
 				.assignment_statement {
 					builder.build_suggestions_from_stmt(parent)
 				}
 				else {
 					// closest_node := closest_named_child(node, u32(builder.offset))
-					// eprintln(closest_node.type_name())
+					// eprintln(closest_node.raw_type_name())
 				}
 			}
 		}
 		.argument_list {
 			call_expr_arg_cur_idx := node.named_child_count()
 			parent := node.parent() or { return }
-			returned_sym := builder.store.infer_symbol_from_node(parent, builder.src) or {
+			returned_sym := builder.store.infer_symbol_from_node(parent) or {
 				builder.filter_return_type
 			}
 
@@ -348,9 +345,9 @@ fn (mut builder CompletionBuilder) build_suggestions_from_list(node ast.Node) {
 			}
 		}
 		.import_symbols_list {
-			import_node := closest_symbol_node_parent(node)
+			import_node := closest_symbol_node_parent_2(node)
 			import_path_node := import_node.child_by_field_name('path') or { return }
-			import_path := import_path_node.text(builder.src)
+			import_path := import_path_node.text()
 			builder.build_suggestions_from_module(import_path)
 		}
 		.type_list {
@@ -370,7 +367,7 @@ fn (mut builder CompletionBuilder) build_suggestions_from_list(node ast.Node) {
 }
 
 // suggestions_from_expr returns a list of results extracted from the Expr node info.
-fn (mut builder CompletionBuilder) build_suggestions_from_expr(node ast.Node) {
+fn (mut builder CompletionBuilder) build_suggestions_from_expr(node ast.RichNode) {
 	node_type_name := node.type_name
 	match node_type_name {
 		.binded_identifier, .identifier, .selector_expression, .call_expression,
@@ -378,7 +375,7 @@ fn (mut builder CompletionBuilder) build_suggestions_from_expr(node ast.Node) {
 			builder.show_global = false
 			builder.show_local = false
 
-			text := node.text(builder.src)
+			text := node.text()
 
 			if builder.is_selector(node) {
 				mut selected_node := node
@@ -389,7 +386,7 @@ fn (mut builder CompletionBuilder) build_suggestions_from_expr(node ast.Node) {
 						}
 					}
 				}
-				if got_sym := builder.store.infer_symbol_from_node(selected_node, builder.src) {
+				if got_sym := builder.store.infer_symbol_from_node(selected_node) {
 					builder.show_mut_only = builder.parent_node.type_name == .block
 						&& got_sym.is_mutable()
 					builder.build_suggestions_from_sym(got_sym.return_sym, true)
@@ -411,17 +408,17 @@ fn (mut builder CompletionBuilder) build_suggestions_from_expr(node ast.Node) {
 			}
 		}
 		.literal_value {
-			closest_element_node := closest_named_child(node, u32(builder.offset))
+			closest_element_node := closest_named_child_2(node, u32(builder.offset))
 			if closest_element_node.type_name == .keyed_element {
 				builder.build_suggestions_from_expr(closest_element_node)
 			} else if parent_node := node.parent() {
-				if got_sym := builder.store.infer_symbol_from_node(parent_node, builder.src) {
+				if got_sym := builder.store.infer_symbol_from_node(parent_node) {
 					builder.build_suggestions_from_sym(got_sym, false)
 				}
 			}
 		}
 		.keyed_element {
-			if got_sym := builder.store.infer_symbol_from_node(node, builder.src) {
+			if got_sym := builder.store.infer_symbol_from_node(node) {
 				builder.show_local = true
 				builder.filter_return_type = got_sym.return_sym
 
@@ -776,8 +773,7 @@ pub fn (mut ls Vls) completion(params lsp.CompletionParams, mut wr ResponseWrite
 	// purposes.
 	mut builder := CompletionBuilder{
 		store: &ls.store
-		src: file.source
-		parent_node: root_node
+		parent_node: file.rich_tree().root_node()
 	}
 
 	// There are some instances that the user would invoke the autocompletion
@@ -852,8 +848,8 @@ pub fn (mut ls Vls) completion(params lsp.CompletionParams, mut wr ResponseWrite
 		}
 
 		builder.ctx = ctx
-		builder.parent_node = parent_node
-		builder.build_suggestions(node, offset)
+		builder.parent_node = ast.Node(parent_node).with(file.source)
+		builder.build_suggestions(ast.Node(node).with(file.source), offset)
 	} else if ctx.trigger_kind == .invoked
 		&& (root_node.named_child_count() == 0 || file.source.len() <= 3) {
 		// When a V file is empty, a list of `module $name` suggsestions will be displayed.
@@ -879,10 +875,10 @@ pub fn (mut ls Vls) hover(params lsp.HoverParams, mut wr ResponseWriter) ?lsp.Ho
 	offset := file.get_offset(pos.line, pos.character)
 	node := traverse_node(file.tree.root_node(), u32(offset))
 	ls.store.set_active_file_path(uri.path(), file.version)
-	return get_hover_data(mut ls.store, node, uri, file.source, u32(offset))
+	return get_hover_data(mut ls.store, ast.Node(node).with(file.source), uri, u32(offset))
 }
 
-fn get_hover_data(mut store analyzer.Store, node ast.Node, uri lsp.DocumentUri, source tree_sitter.SourceText, offset u32) ?lsp.Hover {
+fn get_hover_data(mut store analyzer.Store, node ast.RichNode, uri lsp.DocumentUri, offset u32) ?lsp.Hover {
 	node_type_name := node.type_name
 	if node.is_null() || node_type_name == .comment {
 		return none
@@ -891,10 +887,10 @@ fn get_hover_data(mut store analyzer.Store, node ast.Node, uri lsp.DocumentUri, 
 	mut original_range := node.range()
 	parent_node := node.parent() or { node }
 
-	// eprintln('$node_type_name | ${node.text(source)}')
+	// eprintln('$node_type_name | ${node.text()}')
 	if node_type_name == .module_clause {
 		return lsp.Hover{
-			contents: lsp.v_marked_string(node.text(source))
+			contents: lsp.v_marked_string(node.text())
 			range: tsrange_to_lsp_range(node.range())
 		}
 	} else if node_type_name == .import_path {
@@ -918,13 +914,13 @@ fn get_hover_data(mut store analyzer.Store, node ast.Node, uri lsp.DocumentUri, 
 		}
 	}
 
-	mut sym := store.infer_symbol_from_node(node, source) or { analyzer.void_sym }
+	mut sym := store.infer_symbol_from_node(node) or { analyzer.void_sym }
 	if isnil(sym) || sym.is_void() {
-		closest_parent := closest_symbol_node_parent(node)
-		sym = store.infer_symbol_from_node(closest_parent, source) or { analyzer.void_sym }
+		closest_parent := closest_symbol_node_parent_2(node)
+		sym = store.infer_symbol_from_node(closest_parent) or { analyzer.void_sym }
 	}
 
-	// eprintln('$node_type_name | ${node.text(source)} | $sym')
+	// eprintln('$node_type_name | ${node.text()} | $sym')
 
 	// Send null if range has zero-start and end points
 	if sym.range.start_point.row == 0 && sym.range.start_point.column == 0
@@ -1061,7 +1057,7 @@ pub fn (mut ls Vls) definition(params lsp.TextDocumentPositionParams, mut wr Res
 	}
 
 	ls.store.set_active_file_path(uri.path(), file.version)
-	sym := ls.store.infer_symbol_from_node(node, source) or { analyzer.void_sym }
+	sym := ls.store.infer_symbol_from_node(node.with(source)) or { analyzer.void_sym }
 	if isnil(sym) || sym.is_void() {
 		return none
 	}
@@ -1122,9 +1118,8 @@ pub fn (mut ls Vls) implementation(params lsp.TextDocumentPositionParams, mut wr
 	uri := params.text_document.uri
 	pos := params.position
 	file := ls.files[uri] or { return none }
-	source := file.source
 	offset := file.get_offset(pos.line, pos.character)
-	mut node := traverse_node(file.tree.root_node(), u32(offset))
+	mut node := traverse_node(file.tree.root_node(), u32(offset)).with(file.source)
 	mut original_range := node.range()
 	node_type_name := node.type_name
 	if parent_node := node.parent() {
@@ -1142,9 +1137,9 @@ pub fn (mut ls Vls) implementation(params lsp.TextDocumentPositionParams, mut wr
 	mut got_sym := unsafe { analyzer.void_sym }
 	if parent_node := node.parent() {
 		if parent_node.type_name == .interface_declaration {
-			got_sym = ls.store.symbols[ls.store.cur_dir].get(node.text(source)) or { got_sym }
+			got_sym = ls.store.symbols[ls.store.cur_dir].get(node.text()) or { got_sym }
 		} else {
-			got_sym = ls.store.infer_value_type_from_node(node, source)
+			got_sym = ls.store.infer_value_type_from_node(node)
 		}
 	}
 
