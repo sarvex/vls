@@ -36,3 +36,16 @@ fn test_rope_substr() {
 	r := ropes.new('abcdef')
 	assert r.substr(0, 4) == 'abcd'
 }
+
+fn test_rope_balance() {
+	mut r := ropes.new('abcd')
+
+	r = r.insert(4, 'ef')
+	assert r.str() == 'abcdef'
+	assert r.left.str() == 'abcd'
+	assert r.right.str() == 'ef'
+
+	r = r.rebalance()
+	assert r.str() == 'abcdef'
+	assert r.len() == 6
+}

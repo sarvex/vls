@@ -6,7 +6,9 @@ import analyzer
 import ropes
 
 fn (mut ls Vls) analyze_file(file File) {
-	ls.reporter.clear(file.uri)
+	if Feature.v_diagnostics in ls.enabled_features {
+		ls.reporter.clear(file.uri)
+	}
 	file_path := file.uri.path()
 	ls.store.set_active_file_path(file_path, file.version)
 	tree := file.rich_tree()
@@ -100,6 +102,7 @@ pub fn (mut ls Vls) did_change(params lsp.DidChangeTextDocumentParams, mut wr Re
 	ls.store.set_active_file_path(uri.path(), params.text_document.version)
 
 	mut new_src := ls.files[uri].source
+	mut new_tree := ls.files[uri].tree.raw_tree.copy()
 
 	for content_change in params.content_changes {
 		change_text := content_change.text
@@ -115,22 +118,16 @@ pub fn (mut ls Vls) did_change(params lsp.DidChangeTextDocumentParams, mut wr Re
 		diff := new_len - old_len
 
 		// remove immediately the symbol
-		if change_text.len == 0 && diff < 0 {
-		ls.store.delete_symbol_at_node(ls.files[uri].rich_tree().root_node(),
-				start_point: lsp_pos_to_tspoint(start_pos)
-				end_point: lsp_pos_to_tspoint(old_end_pos)
-				start_byte: u32(start_idx)
-				end_byte: u32(old_end_idx)
-			)
-
-			// shrink rope
+		if (change_text.len == 0 && diff < 0) || new_end_idx < old_end_idx {
 			new_src = new_src.delete(start_idx, old_end_idx - start_idx)
+		} else if old_end_idx < new_end_idx {
+			new_src = new_src.delete(start_idx, new_end_idx - old_end_idx)
 		}
 
 		new_src = new_src.insert(start_idx, change_text)
 
 		// edit the tree
-		ls.files[uri].tree.raw_tree.edit(
+		new_tree.edit(
 			start_byte: u32(start_idx)
 			old_end_byte: u32(old_end_idx)
 			new_end_byte: u32(new_end_idx)
@@ -140,13 +137,29 @@ pub fn (mut ls Vls) did_change(params lsp.DidChangeTextDocumentParams, mut wr Re
 		)
 	}
 
-	mut new_tree := ls.parser.parse_string(source: new_src.string(), tree: ls.files[uri].tree.raw_tree)
+	new_src.rebalance()
+
+	ls.store.delete_symbol_at_node(
+		ls.files[uri].tree.root_node(), 
+		ls.files[uri].source,
+		u32(params.content_changes.first().range.start.line), 
+		u32(params.content_changes.last().range.start.line)
+	)
+
 	// wr.log_message('${ls.files[uri].tree.get_changed_ranges(new_tree)}', .info)
 
 	// wr.log_message('new tree: ${new_tree.root_node().sexpr_str()}', .info)
-	ls.files[uri].tree = new_tree
+	ls.files[uri].tree = ls.parser.parse_string(source: new_src.string(), tree: new_tree)
 	ls.files[uri].source = new_src
 	ls.files[uri].version = params.text_document.version
+
+	if Feature.v_diagnostics !in ls.enabled_features {
+		ls.reporter.clear_from_range(
+			uri, 
+			u32(params.content_changes.first().range.start.line), 
+			u32(params.content_changes.last().range.start.line)
+		)
+	}
 
 	// $if !test {
 	// 	wr.log_message(ls.store.imports.str(), .info)
