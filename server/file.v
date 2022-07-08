@@ -2,7 +2,7 @@ module server
 
 import ast
 import lsp
-import ropes
+import structures.ropes
 import analyzer
 
 struct File {
