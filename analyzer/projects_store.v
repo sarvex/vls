@@ -43,6 +43,8 @@ pub fn (mut store ProjectStore) add_file(file_path string, tree ast.Tree, src_te
 	mut proj := store.project_by_dir(dir) or {
 		store.project_paths << dir
 		new_project := &Project{
+			file_id_gen: store.generate_file_id,
+			module_id_gen: store.generate_module_id,
 			path: dir
 		}
 		store.projects << new_project
@@ -57,12 +59,7 @@ pub fn (mut store ProjectStore) add_file(file_path string, tree ast.Tree, src_te
 	}
 
 	defer { store.file_id_counter++ }
-	return proj.add_file(
-		store.generate_file_id, 
-		store.generate_module_id, 
-		module_name, 
-		file_path
-	)
+	return proj.add_file_to_module(module_name, file_path)
 }
 
 pub fn (mut store ProjectStore) delete_file(location FileLocation) ? {
@@ -84,9 +81,11 @@ pub fn (store &ProjectStore) project_by_dir(dir string) ?&Project {
 [heap]
 pub struct Project {
 pub mut:
-	path         string [required]
-	module_names []string  = []string{cap: 255}
-	modules      []&Module = []Module{cap: 255}
+	file_id_gen   fn () FileId [required]
+	module_id_gen fn () ModuleId [required]
+	path          string [required]
+	module_names  []string  = []string{cap: 255}
+	modules       []&Module = []Module{cap: 255}
 }
 
 pub fn (mut proj Project) new_module(id ModuleId, name string, path string) &Module {
@@ -100,12 +99,12 @@ pub fn (mut proj Project) new_module(id ModuleId, name string, path string) &Mod
 	return new_mod
 }
 
-pub fn (mut proj Project) add_file(file_id fn () FileId, module_id fn () ModuleId, module string, file_path string) FileLocation {
+pub fn (mut proj Project) add_file_to_module(module_name string, file_path string) FileLocation {
 	mut mod := proj.modules.find_by_name(module_name) or {
-		proj.new_module(module_id(), module_name, dir)
+		proj.new_module(proj.module_id_gen(), module_name, dir)
 	}
 
-	mod.files << infer_file_by_file_path(file_id(), file_path)
+	mod.files << infer_file_by_file_path(proj.file_id_gen(), file_path)
 	return FileLocation{
 		module_id: mod.id
 		file_id: new_file.id
