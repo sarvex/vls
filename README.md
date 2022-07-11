@@ -27,6 +27,7 @@ Currently, VLS supports the following language features:
 | Go to Implementation | ✅ | Limited to interfaces for now. |
 | References | ❌ | |
 | Document Highlight | ❌ | |
+| Code Lens | ✅ | Stub implementation |
 | Code Action | ❌ | |
 | Document Symbol / Outline | ✅ | |
 | Workspace Symbols | ✅ | Limited to opened documents. |
@@ -37,12 +38,18 @@ Currently, VLS supports the following language features:
 | Rename | ❌ | |
 | Folding Range | ✅ | |
 
-For a full list of features/methods VLS supports, see[CAPABILITIES.md](CAPABILITIES.md).
+For a full list of features/methods VLS supports, see [CAPABILITIES.md](CAPABILITIES.md).
 
 # Installation
 You can get the V language server on a variety of methods.
 
-## Pre-built/Precompiled Binaries (Recommended)
+## Via V CLI (Recommended)
+Starting with V 0.3 235ef23, you can now install and update VLS via the V CLI by simply executing the following command:
+```
+v ls --install
+```
+
+## Pre-built/Precompiled Binaries
 Pre-built binaries for Windows (x64), MacOS (x64/M1), and Linux (x64) can be found [here](https://github.com/vlang/vls/releases/latest).
 
 ## VSCode
