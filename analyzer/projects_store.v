@@ -4,6 +4,9 @@ import ast
 import tree_sitter_v as v
 import tree_sitter
 
+pub type ModuleId = u16
+pub type FileId = u16
+
 /*
 In V terminology, a "module" is defined as a collection of files in a directory.
 However, there are some instances that a directory may mixed "main" and non-"main" files.
@@ -21,8 +24,8 @@ have any conflicts with module names that have similar names.
 
 pub struct ProjectStore {
 mut:
-	module_id_counter  u16 = 1
-	file_id_counter    u16 = 1
+	module_id_counter  u16 = 1 // 0 is reserved for builtin module
+	file_id_counter    u16 = 1 // 0 is reserved for builtin files
 	project_paths      []string = []string{cap: 65535}
 pub mut:
 	projects           []&Project = []&Project{cap: 65535}
@@ -43,8 +46,8 @@ pub fn (mut store ProjectStore) add_file(file_path string, tree ast.Tree, src_te
 	mut proj := store.project_by_dir(dir) or {
 		store.project_paths << dir
 		new_project := &Project{
-			file_id_gen: store.generate_file_id,
-			module_id_gen: store.generate_module_id,
+			file_id_gen: unsafe { store.generate_file_id },
+			module_id_gen: unsafe { store.generate_module_id },
 			path: dir
 		}
 		store.projects << new_project
@@ -111,9 +114,6 @@ pub fn (mut proj Project) add_file_to_module(module_name string, file_path strin
 	}
 }
 
-pub type ModuleId = u16
-pub type FileId = u16
-
 [heap]
 pub struct Module {
 pub:
@@ -122,7 +122,6 @@ pub mut:
 	sym_id_counter  u16 = 1
 	name            string [required]
 	path            string [required]
-	symbols         []&Symbol = []&Symbol{cap: 500}
 	files           []&File = []&File{cap: 255}
 }
 

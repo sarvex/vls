@@ -72,7 +72,9 @@ pub fn (mut imp Importer) scan_imports(tree &ast.Tree, src_text tree_sitter.Sour
 
 // inject_paths_of_new_imports resolves and injects the path to the Import instance
 pub fn (mut imp Importer) inject_paths_of_new_imports(mut new_imports []&Import, lookup_paths ...string) {
-	mut project := imp.store.dependency_tree.get_node(imp.store.cur_dir) or { imp.store.dependency_tree.add(imp.store.cur_dir) }
+	// mut project := imp.store.dependency_tree.get_node(imp.store.cur_dir) or { imp.store.dependency_tree.add(imp.store.cur_dir) }
+	// TODO:
+	mut project := mp.store.dependency_tree.get_node(0) or { imp.store.dependency_tree.add(1) }
 
 	// Custom iterator for looping over paths without
 	// allocating a new array with concatenated items
@@ -96,10 +98,10 @@ pub fn (mut imp Importer) inject_paths_of_new_imports(mut new_imports []&Import,
 
 			// if the directory is already present in the
 			// dependency tree, inject it directly
-			if imp.store.dependency_tree.has(mod_dir) {
-				new_import.set_path(mod_dir)
-				break
-			}
+			// if imp.store.dependency_tree.has(mod_dir) {
+			// 	new_import.set_path(mod_dir)
+			// 	break
+			// }
 
 			if !os.exists(mod_dir) {
 				continue
@@ -126,7 +128,7 @@ pub fn (mut imp Importer) inject_paths_of_new_imports(mut new_imports []&Import,
 			}
 			if has_v_files {
 				new_import.set_path(mod_dir)
-				imp.store.dependency_tree.add(mod_dir)
+				// imp.store.dependency_tree.add(mod_dir)
 				break
 			}
 		}
@@ -258,13 +260,13 @@ pub fn (mut ss Store) cleanup_imports() int {
 		mut imp_module := ss.imports[ss.cur_dir][i]
 		if imp_module.ranges.len == 0 || (!imp_module.resolved || !imp_module.imported) {
 			// delete in the dependency tree
-			mut dep_node := ss.dependency_tree.get_node(ss.cur_dir) or {
-				panic('Should not panic. Please file an issue to github.com/vlang/vls.')
-				return deleted
-			}
+			// mut dep_node := ss.dependency_tree.get_node(ss.cur_dir) or {
+			// 	panic('Should not panic. Please file an issue to github.com/vlang/vls.')
+			// 	return deleted
+			// }
 
 			// intentionally do not use the variables to the same scope
-			dep_node.remove_dependency(imp_module.path)
+			// dep_node.remove_dependency(imp_module.path)
 
 			// delete dir if possible
 			ss.delete(imp_module.path)
@@ -313,10 +315,6 @@ pub fn (mut imp Import) set_alias(file_name string, alias string) {
 	if alias == imp.module_name {
 		return
 	}
-
-	// if imp.aliases.len == 0 {
-	// 	unsafe { imp.aliases[file_name].free() }
-	// }
 
 	imp.aliases[file_name] = alias
 }

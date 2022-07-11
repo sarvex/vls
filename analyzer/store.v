@@ -38,7 +38,7 @@ pub mut:
 	dependency_tree depgraph.Tree<ModuleId>
 	// Project store
 	// A collection of projects (e.g. directory with one or more modules)
-	project_store ProjectStore
+	projects ProjectStore
 	// Scope data for different opened files
 	// map goes: map[<full file path>]&ScopeTree
 	// opened_scopes map[string]&ScopeTree
@@ -53,6 +53,8 @@ pub mut:
 	base_symbol_locations []BaseSymbolLocation
 	// Locations to the registered binded symbols (a.k.a C.Foo or JS.document)
 	binded_symbol_locations []BindedSymbolLocation
+	// Symbol table
+	symbols               []&Symbol = []&Symbol{cap: 65535}
 }
 
 // report inserts the report to the reporter
@@ -75,22 +77,6 @@ pub fn (mut ss Store) set_active_file_path(file_path string, version int) {
 	if ss.is_file_active(file_path) {
 		return
 	}
-
-	// $if !macos {
-	// 	unsafe {
-	// 		if !isnil(ss.cur_file_path) {
-	// 			ss.cur_file_path.free()
-	// 		}
-
-	// 		if !isnil(ss.cur_file_name) {
-	// 			ss.cur_file_name.free()
-	// 		}
-
-	// 		if !isnil(ss.cur_dir) {
-	// 			ss.cur_dir.free()
-	// 		}
-	// 	}
-	// }
 
 	ss.cur_file_path = file_path
 	ss.cur_dir = os.dir(file_path)
@@ -216,22 +202,20 @@ pub const container_symbol_kinds = [SymbolKind.chan_, .array_, .map_, .ref, .var
 
 // register_symbol registers the given symbol
 pub fn (mut ss Store) register_symbol(mut info Symbol) ?&Symbol {
-	dir := os.dir(info.file_path)
-	// defer {
-	// 	unsafe { dir.free() }
-	// }
+	// if existing_sym := ss.symbols.get(info.fi)
+
 	mut existing_idx := ss.symbols[dir].index(info.name)
 	if existing_idx == -1 && info.kind != .placeholder
 		&& info.kind !in analyzer.container_symbol_kinds {
 		// find by row
-		existing_idx = ss.symbols[dir].index_by_row(info.file_path, info.range.start_point.row)
+		existing_idx = ss.symbols.index_by_row(info.file_path, info.range.start_point.row)
 	}
 
 	// Replace symbol if symbol already exists
 	// the info.kind condition is used for typedefs with anon fn types
 	if existing_idx != -1
-		&& (info.kind != .typedef && ss.symbols[dir][existing_idx].kind != .function_type) {
-		mut existing_sym := ss.symbols[dir][existing_idx]
+		&& (info.kind != .typedef && ss.symbols[existing_idx].kind != .function_type) {
+		mut existing_sym := ss.symbols[existing_idx]
 		if existing_sym.file_version == info.file_version && existing_sym.name == info.name
 			&& existing_sym.range.eq(info.range) && existing_sym.kind == info.kind {
 			return existing_sym
@@ -323,23 +307,24 @@ pub fn (mut ss Store) delete(dir string, excluded_dir ...string) {
 		}
 	}
 
-	is_used := ss.dependency_tree.has_dependents(dir, ...excluded_dir)
+	// is_used := ss.dependency_tree.has_dependents(dir, ...excluded_dir)
+	is_used := false
 	if is_used {
 		return
 	}
 
-	if dep_node := ss.dependency_tree.get_node(dir) {
-		// get all dependencies
-		all_dependencies := dep_node.get_all_dependencies()
+	// if dep_node := ss.dependency_tree.get_node(dir) {
+	// 	// get all dependencies
+	// 	all_dependencies := dep_node.get_all_dependencies()
 
-		// delete all dependencies if possible
-		for dep in all_dependencies {
-			ss.delete(dep, dir)
-		}
+	// 	// delete all dependencies if possible
+	// 	for dep in all_dependencies {
+	// 		ss.delete(dep, dir)
+	// 	}
 
-		// delete dir in dependency tree
-		ss.dependency_tree.delete(dir)
-	}
+	// 	// delete dir in dependency tree
+	// 	ss.dependency_tree.delete(dir)
+	// }
 
 	// delete all imports from unused dir
 	if !is_used {

@@ -5,25 +5,6 @@ module analyzer
 // import os
 import strings
 
-// pub interface ISymbol {
-// 	str() string
-// mut:
-// 	range C.TSRange
-// 	parent ISymbol
-// }
-
-// pub fn (isym ISymbol) root() &Symbol {
-// 	if isym is Symbol {
-// 		return isym
-// 	} else if isym.parent_sym is Symbol {
-// 		return isym.parent_sym
-// 	}
-
-// 	return isym.parent_sym.root()
-// }
-
-// TODO: From ref to chan_, use interface
-
 pub enum SymbolKind {
 	void
 	placeholder
@@ -316,9 +297,9 @@ pub fn (infos []&Symbol) index(name string) int {
 }
 
 // index_by_row returns the index based on the given file path and row
-pub fn (infos []&Symbol) index_by_row(file_location FileLocation, row u32) int {
-	for i, v in infos {
-		if v.file_location == file_location && v.range.start_point.row == row {
+pub fn (symbols []&Symbol) index_by_row(file_location FileLocation, row u32) int {
+	for i, sym in symbols {
+		if sym.file_location == file_location && sym.range.start_point.row == row {
 			return i
 		}
 	}
@@ -326,7 +307,7 @@ pub fn (infos []&Symbol) index_by_row(file_location FileLocation, row u32) int {
 	return -1
 }
 
-pub fn (symbols []&Symbol) filter_by_file_location(file_location string) []&Symbol {
+pub fn (symbols []&Symbol) filter_by_file_location(file_location FileLocation) []&Symbol {
 	mut filtered := []&Symbol{}
 	for sym in symbols {
 		if sym.file_location == file_location {
@@ -340,46 +321,28 @@ pub fn (symbols []&Symbol) filter_by_file_location(file_location string) []&Symb
 			}
 			filtered << child_sym
 		}
-		// unsafe { filtered_from_children.free() }
 	}
 	return filtered
 }
 
-// pub fn (mut infos []&Symbol) remove_symbol_by_range(file_path string, range C.TSRange) {
-// 	mut to_delete_i := -1
-// 	for i, v in infos {
-// 		// not the best solution so far :(
-// 		if v.file_path == file_path {
-// 			eprintln('${v.name} ${v.range}')
-// 		}
-// 		if v.file_path == file_path && v.range.eq(range) {
-// 			eprintln('deleted ${v.name}')
-// 			to_delete_i = i
-// 			break
-// 		}
-// 	}
-
-// 	if to_delete_i == -1 {
-// 		return
-// 	}
-
-// 	unsafe { infos[to_delete_i].free() }
-// 	infos.delete(to_delete_i)
-// }
-
 // exists checks if a symbol is present
-pub fn (infos []&Symbol) exists(name string) bool {
-	return infos.index(name) != -1
+pub fn (infos []&Symbol) exists(file_id FileId, name string) bool {
+	for sym in symbols {
+		if sym.file_location.file_id == file_id && sym.name == name {
+			return true
+		}
+	}
+	return false
 }
 
-// get retreives the symbol based on the given name
-pub fn (infos []&Symbol) get(name string) ?&Symbol {
-	index := infos.index(name)
-	if index == -1 {
-		return error('Symbol `$name` not found')
+pub fn (symbols []&Symbol) get(file_id FileId, name string) ?&Symbol {
+	for sym in symbols {
+		if sym.file_location.file_id == file_id && sym.name == name {
+			return sym
+		}
 	}
 
-	return infos[index] ?
+	return error('Symbol `$name` not found')
 }
 
 // add_child registers the symbol as a child of a given parent symbol
@@ -479,52 +442,6 @@ pub fn is_interface_satisfied(sym &Symbol, interface_sym &Symbol) bool {
 	}
 	return true
 }
-
-// pub fn (ars ArraySymbol) str() string {
-// 	return
-// }
-
-// pub struct RefSymbol {
-// pub mut:
-// 	ref_count int = 1
-// 	range C.TSRange
-// 	parent ISymbol
-// }
-
-// pub fn (rs RefSymbol) str() string {
-// 	return '&'.repeat(rs.ref_count) + rs.parent_sym.str()
-// }
-
-// pub struct MapSymbol {
-// pub mut:
-// 	range C.TSRange
-// 	key_parent ISymbol // string in map[string]Foo
-// 	parent ISymbol // Foo in map[string]Foo
-// }
-
-// pub fn (ms MapSymbol) str() string {
-// 	return 'map[${ms.key_parent}]${ms.parent}'
-// }
-
-// pub struct ChanSymbol {
-// pub mut:
-// 	range C.TSRange
-// 	parent ISymbol
-// }
-
-// pub fn (cs ChanSymbol) str() string {
-// 	return 'chan ${cs.parent}'
-// }
-
-// pub struct OptionSymbol {
-// pub mut:
-// 	range C.TSRange
-// 	parent ISymbol
-// }
-
-// pub fn (opts OptionSymbol) str() string {
-// 	return '?${opts.parent}'
-// }
 
 pub struct BaseSymbolLocation {
 pub:
