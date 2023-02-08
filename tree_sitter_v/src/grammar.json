@@ -581,7 +581,7 @@
         "members": [
           {
             "type": "FIELD",
-            "name": "function",
+            "name": "name",
             "content": {
               "type": "CHOICE",
               "members": [
@@ -4640,7 +4640,7 @@
       "members": [
         {
           "type": "SYMBOL",
-          "name": "_simple_statement"
+          "name": "simple_statement"
         },
         {
           "type": "SYMBOL",
@@ -4704,7 +4704,7 @@
         }
       ]
     },
-    "_simple_statement": {
+    "simple_statement": {
       "type": "CHOICE",
       "members": [
         {
@@ -6394,7 +6394,7 @@
               "members": [
                 {
                   "type": "SYMBOL",
-                  "name": "_simple_statement"
+                  "name": "simple_statement"
                 },
                 {
                   "type": "BLANK"
@@ -6434,7 +6434,7 @@
               "members": [
                 {
                   "type": "SYMBOL",
-                  "name": "_simple_statement"
+                  "name": "simple_statement"
                 },
                 {
                   "type": "BLANK"
@@ -8484,7 +8484,6 @@
     "_simple_type",
     "_statement",
     "_top_level_declaration",
-    "_simple_statement",
     "_expression_with_blocks"
   ]
 }

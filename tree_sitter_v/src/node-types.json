@@ -164,32 +164,6 @@
     ]
   },
   {
-    "type": "_simple_statement",
-    "named": true,
-    "subtypes": [
-      {
-        "type": "_expression",
-        "named": true
-      },
-      {
-        "type": "assignment_statement",
-        "named": true
-      },
-      {
-        "type": "dec_statement",
-        "named": true
-      },
-      {
-        "type": "inc_statement",
-        "named": true
-      },
-      {
-        "type": "short_var_declaration",
-        "named": true
-      }
-    ]
-  },
-  {
     "type": "_simple_type",
     "named": true,
     "subtypes": [
@@ -256,10 +230,6 @@
     "named": true,
     "subtypes": [
       {
-        "type": "_simple_statement",
-        "named": true
-      },
-      {
         "type": "asm_statement",
         "named": true
       },
@@ -313,6 +283,10 @@
       },
       {
         "type": "send_statement",
+        "named": true
+      },
+      {
+        "type": "simple_statement",
         "named": true
       },
       {
@@ -910,7 +884,7 @@
           }
         ]
       },
-      "function": {
+      "name": {
         "multiple": false,
         "required": true,
         "types": [
@@ -1177,7 +1151,7 @@
         "required": false,
         "types": [
           {
-            "type": "_simple_statement",
+            "type": "simple_statement",
             "named": true
           }
         ]
@@ -1187,7 +1161,7 @@
         "required": false,
         "types": [
           {
-            "type": "_simple_statement",
+            "type": "simple_statement",
             "named": true
           }
         ]
@@ -2908,6 +2882,37 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "simple_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "_expression",
+          "named": true
+        },
+        {
+          "type": "assignment_statement",
+          "named": true
+        },
+        {
+          "type": "dec_statement",
+          "named": true
+        },
+        {
+          "type": "inc_statement",
+          "named": true
+        },
+        {
+          "type": "short_var_declaration",
+          "named": true
+        }
+      ]
     }
   },
   {

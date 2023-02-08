@@ -1216,7 +1216,7 @@ pub fn (mut an SemanticAnalyzer) analyze(node ast.Node) {
 		.top_level_declaration {
 			an.top_level_statement(node)
 		}
-		.statement, .simple_statement {
+		.statement {
 			an.statement(node)
 		}
 		.expression, .expression_with_blocks {

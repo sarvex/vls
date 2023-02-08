@@ -1,3 +1,5 @@
+// noinspection JSUnresolvedReference
+
 const PREC = {
   attributes: 8,
   primary: 7,
@@ -241,7 +243,6 @@ module.exports = grammar({
     $._simple_type,
     $._statement,
     $._top_level_declaration,
-    $._simple_statement,
     $._expression_with_blocks,
   ],
 
@@ -354,7 +355,7 @@ module.exports = grammar({
         PREC.comparative,
         seq(
           field(
-            "function",
+            "name",
             choice(
               $.identifier,
               $.binded_identifier,
@@ -881,7 +882,7 @@ module.exports = grammar({
 
     _statement: ($) =>
       choice(
-        $._simple_statement,
+        $.simple_statement,
         $.assert_statement,
         $.continue_statement,
         $.break_statement,
@@ -899,7 +900,7 @@ module.exports = grammar({
         $.hash_statement
       ),
 
-    _simple_statement: ($) =>
+    simple_statement: ($) =>
       choice(
         $._expression,
         $.inc_statement,
@@ -1209,11 +1210,11 @@ module.exports = grammar({
     cstyle_for_clause: ($) =>
       prec.left(
         seq(
-          field("initializer", optional($._simple_statement)),
+          field("initializer", optional($.simple_statement)),
           ";",
           field("condition", optional($._expression)),
           ";",
-          field("update", optional($._simple_statement))
+          field("update", optional($.simple_statement))
         )
       ),
 

@@ -1129,7 +1129,7 @@ pub fn (mut sr SymbolAnalyzer) analyze(node ast.Node) ![]&Symbol {
 		.top_level_declaration {
 			return sr.top_level_decl(node)
 		}
-		.statement, .simple_statement {
+		.statement {
 			return sr.statement(node, mut sr.get_scope(node)!)
 		}
 		.expression, .expression_with_blocks {
